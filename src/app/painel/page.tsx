@@ -101,9 +101,11 @@ function UserDashboardContent() {
   }, []);
 
   const checkAuth = async () => {
-    if (isRedirecting) return; // Evitar múltiplas verificações durante redirecionamento
+    if (isRedirecting) return;
     
+    // Verificar se Supabase está configurado
     if (!supabase) {
+      console.error("Supabase não está configurado");
       setIsRedirecting(true);
       router.replace("/login");
       return;

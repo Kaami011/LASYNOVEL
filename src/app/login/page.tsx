@@ -26,13 +26,19 @@ export default function LoginPage() {
   }, []);
 
   const checkExistingSession = async () => {
-    if (isRedirecting) return; // Evitar múltiplas verificações durante redirecionamento
+    if (isRedirecting) return;
+    
+    // Verificar se Supabase está configurado
+    if (!supabase) {
+      setCheckingAuth(false);
+      setError("Configuração do Supabase não encontrada. Verifique as variáveis de ambiente.");
+      return;
+    }
     
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
-        // Usuário já está logado, redirecionar
         setIsRedirecting(true);
         router.replace("/painel");
         return;
@@ -51,6 +57,13 @@ export default function LoginPage() {
     setError("");
     setSuccess("");
     setLoading(true);
+
+    // Verificar se Supabase está configurado
+    if (!supabase) {
+      setError("Configuração do Supabase não encontrada. Verifique as variáveis de ambiente.");
+      setLoading(false);
+      return;
+    }
 
     try {
       if (isLogin) {
@@ -98,6 +111,12 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = async () => {
+    // Verificar se Supabase está configurado
+    if (!supabase) {
+      setError("Configuração do Supabase não encontrada. Verifique as variáveis de ambiente.");
+      return;
+    }
+
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
