@@ -23,9 +23,10 @@ export default function SubscriptionModal({
   const [loading, setLoading] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [supabase] = useState(() => createClientComponentClient());
 
-  // Verificar sessão ao abrir modal
+  // 🔥 Verificar sessão ao abrir modal
   useEffect(() => {
     if (isOpen) {
       checkSession();
@@ -34,20 +35,30 @@ export default function SubscriptionModal({
 
   const checkSession = async () => {
     try {
+      console.log('🔍 Verificando sessão do usuário...');
+      
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
-      console.log('🔍 Verificando sessão:', {
+      console.log('📊 Status da sessão:', {
         hasSession: !!session,
         userId: session?.user?.id,
+        email: session?.user?.email,
         error: sessionError
       });
 
       if (sessionError || !session) {
         console.error('⚠️ Sem sessão válida:', sessionError);
         setError('Sua sessão expirou. Por favor, faça login novamente.');
+        setIsAuthenticated(false);
+        return;
       }
+
+      setIsAuthenticated(true);
+      console.log('✅ Sessão válida confirmada');
     } catch (err) {
       console.error('❌ Erro ao verificar sessão:', err);
+      setError('Erro ao verificar autenticação. Tente novamente.');
+      setIsAuthenticated(false);
     }
   };
 
@@ -60,8 +71,9 @@ export default function SubscriptionModal({
 
     try {
       console.log('🚀 Iniciando processo de checkout...');
+      console.log('📋 Plano selecionado:', planType);
       
-      // 1. Verificar sessão atual
+      // 🔥 Verificar sessão ANTES de fazer qualquer coisa
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
       if (sessionError || !session) {
@@ -69,26 +81,10 @@ export default function SubscriptionModal({
         throw new Error('Sua sessão expirou. Por favor, faça login novamente.');
       }
 
-      console.log('✅ Sessão válida encontrada');
+      console.log('✅ Sessão válida confirmada antes do checkout');
 
-      // 2. Buscar usuário logado
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-      if (authError || !user) {
-        console.error('⚠️ Usuário não logado:', authError);
-        throw new Error('Você precisa estar logado para assinar. Por favor, faça login novamente.');
-      }
-
-      const userIdFromAuth = user.id;
-      const userEmailFromAuth = user.email;
-
-      console.log('👤 Usuário autenticado:', { 
-        userId: userIdFromAuth, 
-        userEmail: userEmailFromAuth, 
-        planType 
-      });
-
-      // 3. Chamar a API com TODOS os dados
+      // 🔥 IMPORTANTE: Enviar APENAS o planType
+      // A API vai pegar userId e userEmail da sessão do servidor
       console.log('📡 Enviando requisição para API...');
       
       const response = await fetch("/api/create-checkout-session", {
@@ -96,15 +92,16 @@ export default function SubscriptionModal({
         headers: { 
           "Content-Type": "application/json",
         },
-        credentials: 'include', // 🔥 IMPORTANTE: Incluir cookies na requisição
+        credentials: 'include', // 🔥 CRÍTICO: Incluir cookies de sessão
         body: JSON.stringify({
-          planType,
-          userId: userIdFromAuth,
-          userEmail: userEmailFromAuth,
+          planType, // Enviar APENAS o planType
         }),
       });
 
-      console.log('📥 Resposta da API:', response.status);
+      console.log('📥 Resposta da API:', {
+        status: response.status,
+        statusText: response.statusText
+      });
 
       if (!response.ok) {
         const err = await response.json().catch(() => ({ error: 'Erro desconhecido' }));
@@ -116,8 +113,8 @@ export default function SubscriptionModal({
       console.log('✅ Sessão Stripe criada:', data);
 
       if (data.url) {
-        console.log('🔄 Redirecionando para Stripe...');
-        window.location.href = data.url; // redireciona pro Stripe
+        console.log('🔄 Redirecionando para Stripe Checkout...');
+        window.location.href = data.url;
       } else {
         throw new Error('URL de checkout não encontrada');
       }
@@ -169,6 +166,15 @@ export default function SubscriptionModal({
                 Ir para página de login
               </button>
             )}
+          </div>
+        )}
+
+        {/* Session Warning */}
+        {!isAuthenticated && !error && (
+          <div className="mx-8 mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
+            <p className="text-yellow-700 text-sm font-medium">
+              Verificando sua autenticação...
+            </p>
           </div>
         )}
 
@@ -248,7 +254,7 @@ export default function SubscriptionModal({
 
                 <button
                   onClick={() => handleSelectPlan(plan.type)}
-                  disabled={loading}
+                  disabled={loading || !isAuthenticated}
                   className={`w-full py-3 rounded-xl font-bold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center ${
                     plan.featured
                       ? 'bg-pink-500 text-white hover:bg-pink-600 hover:shadow-lg'
@@ -260,6 +266,8 @@ export default function SubscriptionModal({
                       <Loader2 className="w-5 h-5 animate-spin mr-2" />
                       Processando...
                     </>
+                  ) : !isAuthenticated ? (
+                    'Verificando...'
                   ) : (
                     'Assinar Agora'
                   )}

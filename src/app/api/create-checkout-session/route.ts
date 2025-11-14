@@ -6,7 +6,9 @@ import { cookies } from 'next/headers';
 
 export async function POST(req: NextRequest) {
   try {
-    // Validar variável de ambiente do Stripe dentro da função
+    console.log('🚀 Iniciando criação de checkout session...');
+
+    // Validar variável de ambiente do Stripe
     if (!process.env.STRIPE_SECRET_KEY) {
       console.error('❌ STRIPE_SECRET_KEY não configurada');
       return NextResponse.json(
@@ -19,8 +21,29 @@ export async function POST(req: NextRequest) {
       apiVersion: '2024-12-18.acacia',
     });
 
-    // Validar sessão do usuário no servidor
+    // 🔥 CRÍTICO: Validar sessão do usuário NO SERVIDOR (fonte única da verdade)
     const supabase = createRouteHandlerClient({ cookies });
+    
+    console.log('🔍 Verificando sessão do usuário no servidor...');
+    
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError) {
+      console.error('❌ Erro ao obter sessão:', sessionError);
+      return NextResponse.json(
+        { error: 'Erro ao validar sessão. Tente fazer login novamente.' },
+        { status: 401 }
+      );
+    }
+
+    if (!session) {
+      console.error('❌ Nenhuma sessão encontrada no servidor');
+      return NextResponse.json(
+        { error: 'Você não está autenticado. Por favor, faça login novamente.' },
+        { status: 401 }
+      );
+    }
+
     const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
@@ -31,24 +54,31 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log('✅ Usuário autenticado na API:', user.id);
+    console.log('✅ Usuário autenticado na API:', {
+      userId: user.id,
+      email: user.email
+    });
 
-    const { planType, userId, userEmail } = await req.json();
+    // 🔥 IMPORTANTE: Usar dados do servidor, NÃO do cliente
+    const userId = user.id;
+    const userEmail = user.email;
 
-    console.log('📦 Dados recebidos:', { planType, userId, userEmail });
-
-    // Validar que o userId do body corresponde ao usuário autenticado
-    if (userId !== user.id) {
-      console.error('❌ userId não corresponde ao usuário autenticado');
+    if (!userEmail) {
+      console.error('❌ Email do usuário não encontrado');
       return NextResponse.json(
-        { error: 'Dados de usuário inválidos' },
-        { status: 403 }
+        { error: 'Email do usuário não encontrado' },
+        { status: 400 }
       );
     }
 
-    if (!planType || !userId || !userEmail) {
+    // Pegar planType do body (único dado confiável do cliente)
+    const { planType } = await req.json();
+
+    console.log('📦 Dados do checkout:', { planType, userId, userEmail });
+
+    if (!planType) {
       return NextResponse.json(
-        { error: 'Dados incompletos' },
+        { error: 'Tipo de plano não especificado' },
         { status: 400 }
       );
     }
@@ -107,21 +137,21 @@ export async function POST(req: NextRequest) {
       payment_method_types: ['card'],
       line_items: [
         {
-          price: plan.stripePriceId, // Usando o ID correto do plano
+          price: plan.stripePriceId,
           quantity: 1,
         },
       ],
       mode: 'subscription',
       success_url: `${baseUrl}/painel?success=true`,
       cancel_url: `${baseUrl}/painel?canceled=true`,
-      client_reference_id: userId, // 🔥 CRÍTICO: Adicionar userId aqui para o webhook
+      client_reference_id: userId,
       metadata: {
         userId: userId,
         planType: planType,
       },
     });
 
-    console.log('✅ Sessão de checkout criada:', {
+    console.log('✅ Sessão de checkout criada com sucesso:', {
       sessionId: session.id,
       url: session.url
     });
