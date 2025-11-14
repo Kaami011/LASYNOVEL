@@ -131,6 +131,7 @@ export default function UserDashboard() {
         body: JSON.stringify({
           planType,
           userId: user.id,
+          userEmail: user.email,
         }),
       });
 
@@ -140,7 +141,7 @@ export default function UserDashboard() {
         // Redirecionar para o checkout do Stripe
         window.location.href = data.url;
       } else {
-        throw new Error('Erro ao criar sessão de checkout');
+        throw new Error(data.error || 'Erro ao criar sessão de checkout');
       }
     } catch (error) {
       console.error('Erro ao processar pagamento:', error);
