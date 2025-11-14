@@ -21,7 +21,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     duration: 30,
     featured: true,
     stripeProductId: 'prod_TQ52IR5rTLr29e',
-    stripePriceId: 'price_1STMZz1OX1wPZ0uVLc3q8qMO',
+    stripePriceId: 'price_1STEs11OX1wPZ0uVVcOiqdJK',
   },
   {
     type: 'quarterly',
@@ -47,7 +47,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
 
 export async function checkUserSubscription(userId: string) {
   if (!isSupabaseConfigured() || !supabase) {
-    console.error('❌ Supabase não configurado ao verificar assinatura');
+    console.warn('⚠️ Supabase não configurado');
     return null;
   }
 
@@ -59,23 +59,15 @@ export async function checkUserSubscription(userId: string) {
       .eq('status', 'active')
       .gte('end_date', new Date().toISOString())
       .order('end_date', { ascending: false })
-      .limit(1)
-      .single();
+      .limit(1);
 
-    if (error && error.code !== 'PGRST116') {
+    if (error) {
       console.error('❌ Erro ao verificar assinatura:', error);
       return null;
     }
 
-    if (data) {
-      console.log('✅ Assinatura ativa encontrada:', {
-        userId,
-        planType: data.plan_type,
-        endDate: data.end_date
-      });
-    }
-
-    return data;
+    // Retornar o primeiro resultado ou null
+    return data && data.length > 0 ? data[0] : null;
   } catch (error) {
     console.error('❌ Erro ao verificar assinatura:', error);
     return null;
@@ -89,95 +81,54 @@ export async function createSubscription(
   stripeCustomerId: string
 ) {
   if (!isSupabaseConfigured() || !supabase) {
-    const error = new Error('Supabase não configurado');
-    console.error('❌❌❌ ERRO CRÍTICO:', error.message);
-    throw error;
+    throw new Error('Supabase não configurado');
   }
 
   const plan = SUBSCRIPTION_PLANS.find(p => p.type === planType);
   if (!plan) {
-    const error = new Error('Plano inválido');
-    console.error('❌❌❌ ERRO CRÍTICO:', error.message, { planType });
-    throw error;
+    throw new Error(`Plano inválido: ${planType}`);
   }
 
   const startDate = new Date();
   const endDate = new Date();
   endDate.setDate(endDate.getDate() + plan.duration);
 
-  console.log('🔄 Tentando criar assinatura no banco:', {
-    userId,
-    planType,
-    stripeSubscriptionId,
-    stripeCustomerId,
-    startDate: startDate.toISOString(),
-    endDate: endDate.toISOString(),
-    amount: plan.price
+  console.log('📝 Inserindo assinatura no banco:', {
+    user_id: userId,
+    plan_type: planType,
+    status: 'active',
+    start_date: startDate.toISOString(),
+    end_date: endDate.toISOString(),
+    amount: plan.price,
+    stripe_subscription_id: stripeSubscriptionId,
+    stripe_customer_id: stripeCustomerId,
   });
 
-  try {
-    // 🔥 PRIMEIRO: Verificar se já existe assinatura com esse stripe_subscription_id
-    const { data: existingSubscription } = await supabase
-      .from('subscriptions')
-      .select('*')
-      .eq('stripe_subscription_id', stripeSubscriptionId)
-      .single();
+  const { data, error } = await supabase
+    .from('subscriptions')
+    .insert({
+      user_id: userId,
+      plan_type: planType,
+      status: 'active',
+      start_date: startDate.toISOString(),
+      end_date: endDate.toISOString(),
+      amount: plan.price,
+      stripe_subscription_id: stripeSubscriptionId,
+      stripe_customer_id: stripeCustomerId,
+    })
+    .select();
 
-    if (existingSubscription) {
-      console.log('⚠️ Assinatura já existe, atualizando para garantir que está ativa:', existingSubscription.id);
-      
-      // Atualizar para garantir que está ativa
-      const { data: updatedData, error: updateError } = await supabase
-        .from('subscriptions')
-        .update({
-          status: 'active',
-          end_date: endDate.toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .eq('stripe_subscription_id', stripeSubscriptionId)
-        .select()
-        .single();
-
-      if (updateError) {
-        console.error('❌ Erro ao atualizar assinatura existente:', updateError);
-        throw updateError;
-      }
-
-      console.log('✅✅✅ ASSINATURA ATUALIZADA COM SUCESSO:', updatedData);
-      return updatedData;
-    }
-
-    // 🔥 SEGUNDO: Criar nova assinatura
-    const { data, error } = await supabase
-      .from('subscriptions')
-      .insert({
-        user_id: userId,
-        plan_type: planType,
-        status: 'active',
-        start_date: startDate.toISOString(),
-        end_date: endDate.toISOString(),
-        amount: plan.price,
-        stripe_subscription_id: stripeSubscriptionId,
-        stripe_customer_id: stripeCustomerId,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error('❌❌❌ ERRO ao inserir assinatura:', error);
-      console.error('Detalhes do erro:', JSON.stringify(error, null, 2));
-      throw error;
-    }
-
-    console.log('✅✅✅ ASSINATURA CRIADA COM SUCESSO:', data);
-    return data;
-  } catch (error: any) {
-    console.error('❌❌❌ EXCEÇÃO ao criar assinatura:', error);
-    console.error('Stack trace:', error.stack);
+  if (error) {
+    console.error('❌ Erro ao inserir assinatura:', error);
     throw error;
   }
+
+  if (!data || data.length === 0) {
+    throw new Error('Nenhum dado retornado após inserção');
+  }
+
+  console.log('✅ Assinatura inserida com sucesso:', data[0]);
+  return data[0];
 }
 
 export async function updateSubscriptionStatus(
@@ -185,46 +136,32 @@ export async function updateSubscriptionStatus(
   status: 'active' | 'canceled' | 'past_due'
 ) {
   if (!isSupabaseConfigured() || !supabase) {
-    const error = new Error('Supabase não configurado');
-    console.error('❌❌❌ ERRO CRÍTICO:', error.message);
-    throw error;
+    throw new Error('Supabase não configurado');
   }
 
   console.log('🔄 Atualizando status da assinatura:', {
-    stripeSubscriptionId,
-    newStatus: status,
-    timestamp: new Date().toISOString()
+    stripe_subscription_id: stripeSubscriptionId,
+    new_status: status
   });
 
-  try {
-    const { data, error } = await supabase
-      .from('subscriptions')
-      .update({ 
-        status,
-        updated_at: new Date().toISOString()
-      })
-      .eq('stripe_subscription_id', stripeSubscriptionId)
-      .select()
-      .single();
+  const { data, error } = await supabase
+    .from('subscriptions')
+    .update({ status })
+    .eq('stripe_subscription_id', stripeSubscriptionId)
+    .select();
 
-    if (error) {
-      console.error('❌❌❌ ERRO ao atualizar status:', error);
-      console.error('Detalhes do erro:', JSON.stringify(error, null, 2));
-      throw error;
-    }
-
-    if (!data) {
-      console.warn('⚠️ Nenhuma assinatura encontrada com stripe_subscription_id:', stripeSubscriptionId);
-      return null;
-    }
-
-    console.log('✅✅✅ STATUS ATUALIZADO COM SUCESSO:', data);
-    return data;
-  } catch (error: any) {
-    console.error('❌❌❌ EXCEÇÃO ao atualizar status:', error);
-    console.error('Stack trace:', error.stack);
+  if (error) {
+    console.error('❌ Erro ao atualizar status:', error);
     throw error;
   }
+
+  if (!data || data.length === 0) {
+    console.warn('⚠️ Nenhuma assinatura encontrada com stripe_subscription_id:', stripeSubscriptionId);
+    throw new Error(`Assinatura não encontrada: ${stripeSubscriptionId}`);
+  }
+
+  console.log('✅ Status atualizado com sucesso:', data[0]);
+  return data[0];
 }
 
 export async function hasAccessToChapter(userId: string | undefined, chapterNumber: number): Promise<boolean> {

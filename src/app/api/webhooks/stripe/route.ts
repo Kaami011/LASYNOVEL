@@ -13,7 +13,11 @@ export async function POST(req: NextRequest) {
   }
 
   if (!process.env.STRIPE_WEBHOOK_SECRET) {
-    console.warn('⚠️ STRIPE_WEBHOOK_SECRET não configurada - webhooks não funcionarão em produção');
+    console.error('❌ STRIPE_WEBHOOK_SECRET não configurada - webhooks não funcionarão');
+    return NextResponse.json(
+      { error: 'STRIPE_WEBHOOK_SECRET não configurada' },
+      { status: 500 }
+    );
   }
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
@@ -38,8 +42,9 @@ export async function POST(req: NextRequest) {
     event = stripe.webhooks.constructEvent(
       body,
       signature,
-      process.env.STRIPE_WEBHOOK_SECRET!
+      process.env.STRIPE_WEBHOOK_SECRET
     );
+    console.log('✅ Webhook verificado com sucesso:', event.type);
   } catch (err: any) {
     console.error('❌ Erro ao verificar webhook:', err.message);
     return NextResponse.json(
@@ -48,67 +53,166 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  console.log('📨 Webhook recebido:', event.type);
-  console.log('📋 Dados completos do evento:', JSON.stringify(event.data.object, null, 2));
+  console.log('📨 Webhook recebido:', {
+    type: event.type,
+    id: event.id,
+    created: new Date(event.created * 1000).toISOString()
+  });
 
   try {
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
-        console.log('✅ Checkout completado:', session.id);
-        console.log('📦 Session completa:', JSON.stringify(session, null, 2));
+        console.log('🎉 Checkout completado:', {
+          sessionId: session.id,
+          customerId: session.customer,
+          subscriptionId: session.subscription,
+          metadata: session.metadata
+        });
 
         // Extrair dados do metadata
         const userId = session.metadata?.userId;
         const planType = session.metadata?.planType as 'monthly' | 'quarterly' | 'annual';
 
-        if (!userId || !planType) {
-          console.error('❌ Metadata ausente no checkout:', session.metadata);
-          console.error('🔍 Session ID:', session.id);
-          console.error('🔍 Customer:', session.customer);
-          break;
+        if (!userId) {
+          console.error('❌ userId ausente no metadata:', session.metadata);
+          return NextResponse.json(
+            { error: 'userId ausente no metadata' },
+            { status: 400 }
+          );
+        }
+
+        if (!planType) {
+          console.error('❌ planType ausente no metadata:', session.metadata);
+          return NextResponse.json(
+            { error: 'planType ausente no metadata' },
+            { status: 400 }
+          );
         }
 
         // Buscar subscription do Stripe
         const subscriptionId = session.subscription as string;
         const customerId = session.customer as string;
 
-        if (!subscriptionId || !customerId) {
-          console.error('❌ SubscriptionId ou CustomerId ausente');
-          console.error('🔍 Session:', {
-            id: session.id,
-            subscription: subscriptionId,
-            customer: customerId,
-            payment_status: session.payment_status
-          });
-          break;
+        if (!subscriptionId) {
+          console.error('❌ subscriptionId ausente na sessão');
+          return NextResponse.json(
+            { error: 'subscriptionId ausente' },
+            { status: 400 }
+          );
         }
 
-        // 🔥 CRÍTICO: Criar assinatura no banco de dados COM RETRY
-        let retries = 3;
-        let subscriptionCreated = false;
-        
-        while (retries > 0 && !subscriptionCreated) {
+        if (!customerId) {
+          console.error('❌ customerId ausente na sessão');
+          return NextResponse.json(
+            { error: 'customerId ausente' },
+            { status: 400 }
+          );
+        }
+
+        console.log('📝 Criando assinatura no banco:', {
+          userId,
+          planType,
+          subscriptionId,
+          customerId
+        });
+
+        // Criar assinatura no banco de dados
+        try {
+          const subscription = await createSubscription(
+            userId,
+            planType,
+            subscriptionId,
+            customerId
+          );
+          
+          console.log('✅ Assinatura criada com sucesso no banco:', {
+            id: subscription.id,
+            userId: subscription.user_id,
+            status: subscription.status,
+            planType: subscription.plan_type,
+            startDate: subscription.start_date,
+            endDate: subscription.end_date
+          });
+        } catch (dbError: any) {
+          console.error('❌ Erro ao criar assinatura no banco:', {
+            error: dbError.message,
+            code: dbError.code,
+            details: dbError.details
+          });
+          throw dbError;
+        }
+
+        break;
+      }
+
+      case 'customer.subscription.updated': {
+        const subscription = event.data.object as Stripe.Subscription;
+        console.log('🔄 Assinatura atualizada:', {
+          subscriptionId: subscription.id,
+          status: subscription.status,
+          currentPeriodEnd: new Date(subscription.current_period_end * 1000).toISOString()
+        });
+
+        const status = subscription.status === 'active' ? 'active' : 
+                      subscription.status === 'past_due' ? 'past_due' : 'canceled';
+
+        try {
+          await updateSubscriptionStatus(subscription.id, status);
+          console.log('✅ Status atualizado no banco:', {
+            subscriptionId: subscription.id,
+            newStatus: status
+          });
+        } catch (dbError: any) {
+          console.error('❌ Erro ao atualizar status no banco:', {
+            error: dbError.message,
+            subscriptionId: subscription.id
+          });
+          throw dbError;
+        }
+
+        break;
+      }
+
+      case 'customer.subscription.deleted': {
+        const subscription = event.data.object as Stripe.Subscription;
+        console.log('❌ Assinatura cancelada:', {
+          subscriptionId: subscription.id,
+          canceledAt: subscription.canceled_at ? new Date(subscription.canceled_at * 1000).toISOString() : null
+        });
+
+        try {
+          await updateSubscriptionStatus(subscription.id, 'canceled');
+          console.log('✅ Assinatura marcada como cancelada no banco');
+        } catch (dbError: any) {
+          console.error('❌ Erro ao cancelar assinatura no banco:', {
+            error: dbError.message,
+            subscriptionId: subscription.id
+          });
+          throw dbError;
+        }
+
+        break;
+      }
+
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object as Stripe.Invoice;
+        console.log('⚠️ Pagamento falhou:', {
+          invoiceId: invoice.id,
+          subscriptionId: invoice.subscription,
+          attemptCount: invoice.attempt_count
+        });
+
+        if (invoice.subscription) {
           try {
-            await createSubscription(userId, planType, subscriptionId, customerId);
-            subscriptionCreated = true;
-            console.log('✅✅✅ ASSINATURA CRIADA COM SUCESSO NO BANCO:', {
-              userId,
-              planType,
-              subscriptionId,
-              customerId,
-              timestamp: new Date().toISOString()
+            await updateSubscriptionStatus(invoice.subscription as string, 'past_due');
+            console.log('✅ Assinatura marcada como past_due');
+          } catch (dbError: any) {
+            console.error('❌ Erro ao marcar como past_due:', {
+              error: dbError.message,
+              subscriptionId: invoice.subscription
             });
-          } catch (error: any) {
-            retries--;
-            console.error(`❌ Tentativa falhou (${3 - retries}/3):`, error.message);
-            if (retries > 0) {
-              console.log(`🔄 Tentando novamente em 2 segundos... (${retries} tentativas restantes)`);
-              await new Promise(resolve => setTimeout(resolve, 2000));
-            } else {
-              console.error('❌❌❌ FALHA CRÍTICA: Não foi possível criar assinatura após 3 tentativas');
-              throw error;
-            }
+            throw dbError;
           }
         }
 
@@ -117,132 +221,23 @@ export async function POST(req: NextRequest) {
 
       case 'invoice.payment_succeeded': {
         const invoice = event.data.object as Stripe.Invoice;
-        console.log('✅ Pagamento bem-sucedido:', invoice.id);
-        console.log('💰 Invoice completa:', JSON.stringify(invoice, null, 2));
-
-        if (invoice.subscription) {
-          // 🔥 GARANTIR que assinatura está ativa após pagamento
-          let retries = 3;
-          let statusUpdated = false;
-          
-          while (retries > 0 && !statusUpdated) {
-            try {
-              await updateSubscriptionStatus(invoice.subscription as string, 'active');
-              statusUpdated = true;
-              console.log('✅✅✅ ASSINATURA REATIVADA/CONFIRMADA:', {
-                subscriptionId: invoice.subscription,
-                invoiceId: invoice.id,
-                amount: invoice.amount_paid / 100,
-                timestamp: new Date().toISOString()
-              });
-            } catch (error: any) {
-              retries--;
-              console.error(`❌ Tentativa falhou (${3 - retries}/3):`, error.message);
-              if (retries > 0) {
-                console.log(`🔄 Tentando novamente em 2 segundos... (${retries} tentativas restantes)`);
-                await new Promise(resolve => setTimeout(resolve, 2000));
-              } else {
-                console.error('❌❌❌ FALHA CRÍTICA: Não foi possível atualizar status após 3 tentativas');
-                throw error;
-              }
-            }
-          }
-        }
-
-        break;
-      }
-
-      case 'customer.subscription.created': {
-        const subscription = event.data.object as Stripe.Subscription;
-        console.log('🆕 Nova assinatura criada no Stripe:', subscription.id);
-        console.log('📦 Subscription completa:', JSON.stringify(subscription, null, 2));
-        
-        // Log detalhado para debug
-        console.log('🔍 Detalhes da subscription:', {
-          id: subscription.id,
-          customer: subscription.customer,
-          status: subscription.status,
-          current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-          current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-          items: subscription.items.data.map(item => ({
-            price: item.price.id,
-            product: item.price.product
-          }))
+        console.log('✅ Pagamento bem-sucedido:', {
+          invoiceId: invoice.id,
+          subscriptionId: invoice.subscription,
+          amountPaid: invoice.amount_paid / 100
         });
 
-        break;
-      }
-
-      case 'customer.subscription.updated': {
-        const subscription = event.data.object as Stripe.Subscription;
-        console.log('🔄 Assinatura atualizada:', subscription.id);
-        console.log('📦 Status:', subscription.status);
-
-        const status = subscription.status === 'active' ? 'active' : 
-                      subscription.status === 'past_due' ? 'past_due' : 'canceled';
-
-        // 🔥 GARANTIR atualização com retry
-        let retries = 3;
-        let statusUpdated = false;
-        
-        while (retries > 0 && !statusUpdated) {
-          try {
-            await updateSubscriptionStatus(subscription.id, status);
-            statusUpdated = true;
-            console.log('✅✅✅ STATUS ATUALIZADO NO BANCO:', {
-              subscriptionId: subscription.id,
-              newStatus: status,
-              timestamp: new Date().toISOString()
-            });
-          } catch (error: any) {
-            retries--;
-            console.error(`❌ Tentativa falhou (${3 - retries}/3):`, error.message);
-            if (retries > 0) {
-              console.log(`🔄 Tentando novamente em 2 segundos... (${retries} tentativas restantes)`);
-              await new Promise(resolve => setTimeout(resolve, 2000));
-            }
-          }
-        }
-
-        break;
-      }
-
-      case 'customer.subscription.deleted': {
-        const subscription = event.data.object as Stripe.Subscription;
-        console.log('❌ Assinatura cancelada:', subscription.id);
-
-        // 🔥 GARANTIR cancelamento com retry
-        let retries = 3;
-        let statusUpdated = false;
-        
-        while (retries > 0 && !statusUpdated) {
-          try {
-            await updateSubscriptionStatus(subscription.id, 'canceled');
-            statusUpdated = true;
-            console.log('✅✅✅ ASSINATURA CANCELADA NO BANCO:', {
-              subscriptionId: subscription.id,
-              timestamp: new Date().toISOString()
-            });
-          } catch (error: any) {
-            retries--;
-            console.error(`❌ Tentativa falhou (${3 - retries}/3):`, error.message);
-            if (retries > 0) {
-              console.log(`🔄 Tentando novamente em 2 segundos... (${retries} tentativas restantes)`);
-              await new Promise(resolve => setTimeout(resolve, 2000));
-            }
-          }
-        }
-
-        break;
-      }
-
-      case 'invoice.payment_failed': {
-        const invoice = event.data.object as Stripe.Invoice;
-        console.log('⚠️ Pagamento falhou:', invoice.id);
-
         if (invoice.subscription) {
-          await updateSubscriptionStatus(invoice.subscription as string, 'past_due');
-          console.log('✅ Assinatura marcada como past_due');
+          try {
+            await updateSubscriptionStatus(invoice.subscription as string, 'active');
+            console.log('✅ Assinatura reativada');
+          } catch (dbError: any) {
+            console.error('❌ Erro ao reativar assinatura:', {
+              error: dbError.message,
+              subscriptionId: invoice.subscription
+            });
+            throw dbError;
+          }
         }
 
         break;
@@ -252,49 +247,26 @@ export async function POST(req: NextRequest) {
         console.log(`ℹ️ Evento não tratado: ${event.type}`);
     }
 
-    return NextResponse.json({ received: true });
+    return NextResponse.json({ 
+      received: true,
+      eventType: event.type,
+      eventId: event.id
+    });
   } catch (error: any) {
-    console.error('❌❌❌ ERRO CRÍTICO ao processar webhook:', error);
-    console.error('Stack trace:', error.stack);
+    console.error('❌ Erro ao processar webhook:', {
+      error: error.message,
+      stack: error.stack,
+      eventType: event.type,
+      eventId: event.id
+    });
     
-    // Retornar 200 mesmo com erro para evitar retry infinito do Stripe
-    // mas logar tudo para investigação
     return NextResponse.json(
       { 
-        received: true, 
-        error: error.message,
-        note: 'Erro logado mas retornando 200 para evitar retry'
+        error: error.message || 'Erro ao processar webhook',
+        eventType: event.type,
+        eventId: event.id
       },
-      { status: 200 }
+      { status: 500 }
     );
   }
-}
-
-// Adicionar handler para outros métodos HTTP (retorna 405)
-export async function GET() {
-  return NextResponse.json(
-    { error: 'Método não permitido. Use POST para webhooks do Stripe.' },
-    { status: 405 }
-  );
-}
-
-export async function PUT() {
-  return NextResponse.json(
-    { error: 'Método não permitido. Use POST para webhooks do Stripe.' },
-    { status: 405 }
-  );
-}
-
-export async function DELETE() {
-  return NextResponse.json(
-    { error: 'Método não permitido. Use POST para webhooks do Stripe.' },
-    { status: 405 }
-  );
-}
-
-export async function PATCH() {
-  return NextResponse.json(
-    { error: 'Método não permitido. Use POST para webhooks do Stripe.' },
-    { status: 405 }
-  );
 }

@@ -77,22 +77,17 @@ const readingHistory = [
   },
 ];
 
-// Componente separado para lidar com useSearchParams
-function DashboardContent() {
+function UserDashboardContent() {
   const [activeTab, setActiveTab] = useState<"reading" | "favorites" | "profile" | "subscription">("reading");
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [subscription, setSubscription] = useState<any>(null);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    if (!isSupabaseConfigured() || !supabase) {
-      router.push("/login");
-      return;
-    }
-    
     checkAuth();
     
     // Verificar se voltou do checkout com sucesso
@@ -103,11 +98,14 @@ function DashboardContent() {
         checkAuth();
       }, 2000);
     }
-  }, [searchParams, router]);
+  }, []);
 
   const checkAuth = async () => {
+    if (isRedirecting) return; // Evitar múltiplas verificações durante redirecionamento
+    
     if (!supabase) {
-      router.push("/login");
+      setIsRedirecting(true);
+      router.replace("/login");
       return;
     }
 
@@ -115,7 +113,8 @@ function DashboardContent() {
       const { data: { user }, error } = await supabase.auth.getUser();
       
       if (error || !user) {
-        router.push("/login");
+        setIsRedirecting(true);
+        router.replace("/login");
         return;
       }
 
@@ -128,7 +127,10 @@ function DashboardContent() {
       setLoading(false);
     } catch (error) {
       console.error("Erro ao verificar autenticação:", error);
-      router.push("/login");
+      if (!isRedirecting) {
+        setIsRedirecting(true);
+        router.replace("/login");
+      }
     }
   };
 
@@ -136,7 +138,7 @@ function DashboardContent() {
     if (!supabase) return;
     
     await supabase.auth.signOut();
-    router.push("/");
+    router.replace("/");
   };
 
   if (loading) {
@@ -538,7 +540,6 @@ function DashboardContent() {
   );
 }
 
-// Componente principal com Suspense
 export default function UserDashboard() {
   return (
     <Suspense fallback={
@@ -549,7 +550,7 @@ export default function UserDashboard() {
         </div>
       </div>
     }>
-      <DashboardContent />
+      <UserDashboardContent />
     </Suspense>
   );
 }
