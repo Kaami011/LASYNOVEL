@@ -6,7 +6,7 @@ import BookCard from "@/components/custom/BookCard";
 import SubscriptionModal from "@/components/custom/SubscriptionModal";
 import { Heart, BookOpen, Clock, User, Settings, LogOut, Crown, Check } from "lucide-react";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
 import { checkUserSubscription, SUBSCRIPTION_PLANS } from "@/lib/subscription";
@@ -77,7 +77,7 @@ const readingHistory = [
   },
 ];
 
-export default function UserDashboard() {
+function UserDashboardContent() {
   const [activeTab, setActiveTab] = useState<"reading" | "favorites" | "profile" | "subscription">("reading");
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
@@ -534,5 +534,20 @@ export default function UserDashboard() {
         />
       )}
     </div>
+  );
+}
+
+export default function UserDashboard() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-b from-white to-pink-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando...</p>
+        </div>
+      </div>
+    }>
+      <UserDashboardContent />
+    </Suspense>
   );
 }
