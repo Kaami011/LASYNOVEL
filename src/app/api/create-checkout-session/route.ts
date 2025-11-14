@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { SUBSCRIPTION_PLANS } from '@/lib/subscription';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,9 +19,32 @@ export async function POST(req: NextRequest) {
       apiVersion: '2024-12-18.acacia',
     });
 
+    // Validar sessão do usuário no servidor
+    const supabase = createRouteHandlerClient({ cookies });
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      console.error('❌ Usuário não autenticado na API:', authError);
+      return NextResponse.json(
+        { error: 'Usuário não autenticado. Faça login novamente.' },
+        { status: 401 }
+      );
+    }
+
+    console.log('✅ Usuário autenticado na API:', user.id);
+
     const { planType, userId, userEmail } = await req.json();
 
     console.log('📦 Dados recebidos:', { planType, userId, userEmail });
+
+    // Validar que o userId do body corresponde ao usuário autenticado
+    if (userId !== user.id) {
+      console.error('❌ userId não corresponde ao usuário autenticado');
+      return NextResponse.json(
+        { error: 'Dados de usuário inválidos' },
+        { status: 403 }
+      );
+    }
 
     if (!planType || !userId || !userEmail) {
       return NextResponse.json(
@@ -89,6 +114,7 @@ export async function POST(req: NextRequest) {
       mode: 'subscription',
       success_url: `${baseUrl}/painel?success=true`,
       cancel_url: `${baseUrl}/painel?canceled=true`,
+      client_reference_id: userId, // 🔥 CRÍTICO: Adicionar userId aqui para o webhook
       metadata: {
         userId: userId,
         planType: planType,

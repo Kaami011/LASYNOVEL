@@ -2,10 +2,8 @@
 
 import { X, Check, Sparkles, Loader2 } from "lucide-react";
 import { SUBSCRIPTION_PLANS } from "@/lib/subscription";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
-
-const supabase = createClientComponentClient();
 
 interface SubscriptionModalProps {
   isOpen: boolean;
@@ -25,6 +23,33 @@ export default function SubscriptionModal({
   const [loading, setLoading] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [supabase] = useState(() => createClientComponentClient());
+
+  // Verificar sessão ao abrir modal
+  useEffect(() => {
+    if (isOpen) {
+      checkSession();
+    }
+  }, [isOpen]);
+
+  const checkSession = async () => {
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      console.log('🔍 Verificando sessão:', {
+        hasSession: !!session,
+        userId: session?.user?.id,
+        error: sessionError
+      });
+
+      if (sessionError || !session) {
+        console.error('⚠️ Sem sessão válida:', sessionError);
+        setError('Sua sessão expirou. Por favor, faça login novamente.');
+      }
+    } catch (err) {
+      console.error('❌ Erro ao verificar sessão:', err);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -34,26 +59,44 @@ export default function SubscriptionModal({
     setError(null);
 
     try {
-      // 1. Buscar usuário logado
+      console.log('🚀 Iniciando processo de checkout...');
+      
+      // 1. Verificar sessão atual
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        console.error('⚠️ Erro de sessão:', sessionError);
+        throw new Error('Sua sessão expirou. Por favor, faça login novamente.');
+      }
+
+      console.log('✅ Sessão válida encontrada');
+
+      // 2. Buscar usuário logado
       const { data: { user }, error: authError } = await supabase.auth.getUser();
 
       if (authError || !user) {
-        console.error("⚠️ Usuário não logado:", authError);
-        setError("Você precisa estar logado para assinar.");
-        setLoading(false);
-        setSelectedPlan(null);
-        return;
+        console.error('⚠️ Usuário não logado:', authError);
+        throw new Error('Você precisa estar logado para assinar. Por favor, faça login novamente.');
       }
 
       const userIdFromAuth = user.id;
       const userEmailFromAuth = user.email;
 
-      console.log("👤 Usuário no checkout:", { userId: userIdFromAuth, userEmail: userEmailFromAuth, planType });
+      console.log('👤 Usuário autenticado:', { 
+        userId: userIdFromAuth, 
+        userEmail: userEmailFromAuth, 
+        planType 
+      });
 
-      // 2. Chamar a API com TODOS os dados
+      // 3. Chamar a API com TODOS os dados
+      console.log('📡 Enviando requisição para API...');
+      
       const response = await fetch("/api/create-checkout-session", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+        },
+        credentials: 'include', // 🔥 IMPORTANTE: Incluir cookies na requisição
         body: JSON.stringify({
           planType,
           userId: userIdFromAuth,
@@ -61,23 +104,26 @@ export default function SubscriptionModal({
         }),
       });
 
+      console.log('📥 Resposta da API:', response.status);
+
       if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        console.error("❌ Erro ao criar sessão:", err);
-        throw new Error(err.error || "Erro ao iniciar o checkout. Tente novamente.");
+        const err = await response.json().catch(() => ({ error: 'Erro desconhecido' }));
+        console.error('❌ Erro ao criar sessão:', err);
+        throw new Error(err.error || 'Erro ao iniciar o checkout. Tente novamente.');
       }
 
       const data = await response.json();
-      console.log("✅ Sessão Stripe criada:", data);
+      console.log('✅ Sessão Stripe criada:', data);
 
       if (data.url) {
+        console.log('🔄 Redirecionando para Stripe...');
         window.location.href = data.url; // redireciona pro Stripe
       } else {
-        throw new Error("URL de checkout não encontrada");
+        throw new Error('URL de checkout não encontrada');
       }
     } catch (err: any) {
-      console.error("❌ Erro inesperado no handleSelectPlan:", err);
-      setError(err.message || "Erro inesperado ao iniciar o checkout.");
+      console.error('❌ Erro inesperado no handleSelectPlan:', err);
+      setError(err.message || 'Erro inesperado ao iniciar o checkout.');
       setLoading(false);
       setSelectedPlan(null);
     }
@@ -115,6 +161,14 @@ export default function SubscriptionModal({
         {error && (
           <div className="mx-8 mt-6 p-4 bg-red-50 border border-red-200 rounded-xl">
             <p className="text-red-600 text-sm font-medium">{error}</p>
+            {error.includes('sessão') && (
+              <button
+                onClick={() => window.location.href = '/login'}
+                className="mt-2 text-sm text-red-700 underline hover:text-red-800"
+              >
+                Ir para página de login
+              </button>
+            )}
           </div>
         )}
 
