@@ -8,7 +8,7 @@ import { SUBSCRIPTION_PLANS } from '@/lib/subscription';
  * IMPORTANTE:
  * - Não depende mais da autenticação do Supabase no backend.
  * - Recebe `userId` e `userEmail` pelo body da requisição (vindos do painel já logado).
- * - Usa esses dados apenas para vincular a assinatura ao usuário via `metadata`.
+ * - Usa esses dados para vincular a assinatura ao usuário via `client_reference_id` e `metadata`.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -83,13 +83,17 @@ export async function POST(req: NextRequest) {
         },
       ],
       customer_email: userEmail || undefined,
+      // 🔥 CRÍTICO: client_reference_id é usado pelo webhook para identificar o usuário
+      client_reference_id: userId,
       metadata: {
         userId,
         planType,
+        userEmail: userEmail || '',
       },
     });
 
     console.log('✅ [API] Checkout criado com sucesso:', checkoutSession.id);
+    console.log('📋 [API] client_reference_id definido como:', userId);
 
     return NextResponse.json({
       sessionId: checkoutSession.id,
