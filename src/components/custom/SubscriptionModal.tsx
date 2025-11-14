@@ -3,6 +3,9 @@
 import { X, Check, Sparkles, Loader2 } from "lucide-react";
 import { SUBSCRIPTION_PLANS } from "@/lib/subscription";
 import { useState } from "react";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+
+const supabase = createClientComponentClient();
 
 interface SubscriptionModalProps {
   isOpen: boolean;
@@ -25,47 +28,56 @@ export default function SubscriptionModal({
 
   if (!isOpen) return null;
 
-  const handleSelectPlan = async (planType: 'monthly' | 'quarterly' | 'annual') => {
+  const handleSelectPlan = async (planType: "monthly" | "quarterly" | "annual") => {
     setLoading(true);
     setSelectedPlan(planType);
     setError(null);
 
     try {
-      console.log('Iniciando checkout para plano:', planType);
-      
-      // Criar sessão de checkout no backend
-      const response = await fetch('/api/create-checkout-session', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+      // 1. Buscar usuário logado
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+      if (authError || !user) {
+        console.error("⚠️ Usuário não logado:", authError);
+        setError("Você precisa estar logado para assinar.");
+        setLoading(false);
+        setSelectedPlan(null);
+        return;
+      }
+
+      const userIdFromAuth = user.id;
+      const userEmailFromAuth = user.email;
+
+      console.log("👤 Usuário no checkout:", { userId: userIdFromAuth, userEmail: userEmailFromAuth, planType });
+
+      // 2. Chamar a API com TODOS os dados
+      const response = await fetch("/api/create-checkout-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           planType,
-          userId,
-          userEmail,
+          userId: userIdFromAuth,
+          userEmail: userEmailFromAuth,
         }),
       });
 
-      console.log('Response status:', response.status);
-      
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Erro ao criar sessão de checkout');
+        const err = await response.json().catch(() => ({}));
+        console.error("❌ Erro ao criar sessão:", err);
+        throw new Error(err.error || "Erro ao iniciar o checkout. Tente novamente.");
       }
 
       const data = await response.json();
-      console.log('Checkout data:', data);
+      console.log("✅ Sessão Stripe criada:", data);
 
-      // Redirecionar diretamente para a URL do Stripe
       if (data.url) {
-        console.log('Redirecionando para:', data.url);
-        window.location.href = data.url;
+        window.location.href = data.url; // redireciona pro Stripe
       } else {
-        throw new Error('URL de checkout não encontrada');
+        throw new Error("URL de checkout não encontrada");
       }
     } catch (err: any) {
-      console.error('Erro ao processar pagamento:', err);
-      setError(err.message || 'Erro ao processar pagamento. Tente novamente.');
+      console.error("❌ Erro inesperado no handleSelectPlan:", err);
+      setError(err.message || "Erro inesperado ao iniciar o checkout.");
       setLoading(false);
       setSelectedPlan(null);
     }
