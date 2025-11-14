@@ -6,7 +6,7 @@ import BookCard from "@/components/custom/BookCard";
 import SubscriptionModal from "@/components/custom/SubscriptionModal";
 import { Heart, BookOpen, Clock, User, Settings, LogOut, Crown, Check } from "lucide-react";
 import Link from "next/link";
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect } from "react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
 import { checkUserSubscription, SUBSCRIPTION_PLANS } from "@/lib/subscription";
@@ -77,17 +77,21 @@ const readingHistory = [
   },
 ];
 
-function UserDashboardContent() {
+export default function UserDashboard() {
   const [activeTab, setActiveTab] = useState<"reading" | "favorites" | "profile" | "subscription">("reading");
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [subscription, setSubscription] = useState<any>(null);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
-  const [isRedirecting, setIsRedirecting] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
 
   useEffect(() => {
+    if (!isSupabaseConfigured() || !supabase) {
+      router.push("/login");
+      return;
+    }
+    
     checkAuth();
     
     // Verificar se voltou do checkout com sucesso
@@ -98,14 +102,11 @@ function UserDashboardContent() {
         checkAuth();
       }, 2000);
     }
-  }, []);
+  }, [searchParams, router]);
 
   const checkAuth = async () => {
-    if (isRedirecting) return; // Evitar múltiplas verificações durante redirecionamento
-    
     if (!supabase) {
-      setIsRedirecting(true);
-      router.replace("/login");
+      router.push("/login");
       return;
     }
 
@@ -113,8 +114,7 @@ function UserDashboardContent() {
       const { data: { user }, error } = await supabase.auth.getUser();
       
       if (error || !user) {
-        setIsRedirecting(true);
-        router.replace("/login");
+        router.push("/login");
         return;
       }
 
@@ -127,10 +127,7 @@ function UserDashboardContent() {
       setLoading(false);
     } catch (error) {
       console.error("Erro ao verificar autenticação:", error);
-      if (!isRedirecting) {
-        setIsRedirecting(true);
-        router.replace("/login");
-      }
+      router.push("/login");
     }
   };
 
@@ -138,7 +135,7 @@ function UserDashboardContent() {
     if (!supabase) return;
     
     await supabase.auth.signOut();
-    router.replace("/");
+    router.push("/");
   };
 
   if (loading) {
@@ -537,20 +534,5 @@ function UserDashboardContent() {
         />
       )}
     </div>
-  );
-}
-
-export default function UserDashboard() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-gradient-to-b from-white to-pink-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando...</p>
-        </div>
-      </div>
-    }>
-      <UserDashboardContent />
-    </Suspense>
   );
 }

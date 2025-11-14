@@ -2,21 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { SUBSCRIPTION_PLANS } from '@/lib/subscription';
 
+// Validar variável de ambiente do Stripe
+if (!process.env.STRIPE_SECRET_KEY) {
+  throw new Error('STRIPE_SECRET_KEY não configurada nas variáveis de ambiente');
+}
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+  apiVersion: '2024-12-18.acacia',
+});
+
 export async function POST(req: NextRequest) {
   try {
-    // Validar variável de ambiente do Stripe dentro da função
-    if (!process.env.STRIPE_SECRET_KEY) {
-      console.error('❌ STRIPE_SECRET_KEY não configurada');
-      return NextResponse.json(
-        { error: 'Configuração do Stripe ausente' },
-        { status: 500 }
-      );
-    }
-
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2024-12-18.acacia',
-    });
-
     const { planType, userId, userEmail } = await req.json();
 
     console.log('📦 Dados recebidos:', { planType, userId, userEmail });
