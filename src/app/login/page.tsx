@@ -2,7 +2,7 @@
 
 import Header from "@/components/custom/Header";
 import Footer from "@/components/custom/Footer";
-import { Mail, Lock, Eye, EyeOff, Heart } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, Heart, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
@@ -122,16 +122,27 @@ export default function LoginPage() {
     } catch (err: any) {
       console.error("❌ Erro capturado:", err);
       
-      // Mensagens de erro mais amigáveis
+      // Mensagens de erro mais amigáveis e específicas
       let errorMessage = "Ocorreu um erro. Tente novamente.";
       
-      if (err.message?.includes("Invalid login credentials")) {
+      // Erro de CORS / Failed to fetch
+      if (err.message?.includes("Failed to fetch") || err.message?.includes("NetworkError") || err.message?.includes("fetch")) {
+        errorMessage = "❌ Erro de conexão com o servidor. Isso geralmente acontece quando o domínio não está configurado no Supabase. Clique no botão 'Diagnóstico' abaixo para mais informações.";
+      } 
+      // Credenciais inválidas
+      else if (err.message?.includes("Invalid login credentials")) {
         errorMessage = "Email ou senha incorretos. Verifique suas credenciais.";
-      } else if (err.message?.includes("Email not confirmed")) {
+      } 
+      // Email não confirmado
+      else if (err.message?.includes("Email not confirmed")) {
         errorMessage = "Por favor, confirme seu email antes de fazer login.";
-      } else if (err.message?.includes("User already registered")) {
+      } 
+      // Usuário já registrado
+      else if (err.message?.includes("User already registered")) {
         errorMessage = "Este email já está cadastrado. Tente fazer login.";
-      } else if (err.message) {
+      } 
+      // Outros erros
+      else if (err.message) {
         errorMessage = err.message;
       }
       
@@ -162,7 +173,13 @@ export default function LoginPage() {
       }
     } catch (err: any) {
       console.error("❌ Erro capturado:", err);
-      setError(err.message || "Erro ao fazer login com Google");
+      
+      // Mensagem específica para erro de CORS no OAuth
+      if (err.message?.includes("Failed to fetch") || err.message?.includes("NetworkError")) {
+        setError("❌ Erro de conexão. Configure o domínio no Supabase. Veja o diagnóstico abaixo.");
+      } else {
+        setError(err.message || "Erro ao fazer login com Google");
+      }
     }
   };
 
@@ -201,8 +218,21 @@ export default function LoginPage() {
           {/* Form Card */}
           <div className="bg-white rounded-3xl shadow-2xl p-8">
             {error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm">
-                {error}
+              <div className="mb-4 p-4 bg-red-50 border-2 border-red-200 text-red-700 rounded-xl text-sm">
+                <div className="flex items-start space-x-2">
+                  <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p>{error}</p>
+                    {error.includes("Failed to fetch") && (
+                      <Link 
+                        href="/diagnostico-supabase"
+                        className="inline-block mt-3 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                      >
+                        🔍 Ver Diagnóstico Completo
+                      </Link>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -363,6 +393,16 @@ export default function LoginPage() {
                   {isLogin ? "Criar conta" : "Entrar"}
                 </button>
               </p>
+            </div>
+
+            {/* Link para Diagnóstico */}
+            <div className="mt-6 pt-6 border-t border-pink-100">
+              <Link
+                href="/diagnostico-supabase"
+                className="block text-center text-sm text-gray-600 hover:text-pink-600 transition-colors"
+              >
+                🔍 Problemas com login? Executar diagnóstico
+              </Link>
             </div>
           </div>
 
