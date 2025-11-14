@@ -6,10 +6,10 @@ import BookCard from "@/components/custom/BookCard";
 import SubscriptionModal from "@/components/custom/SubscriptionModal";
 import { Heart, BookOpen, Clock, User, Settings, LogOut, Crown, Check } from "lucide-react";
 import Link from "next/link";
-import { useState, useEffect, Suspense } from "react";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import { useRouter, useSearchParams } from "next/navigation";
-import { checkUserSubscription, SUBSCRIPTION_PLANS } from "@/lib/subscription";
+import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
+import { useRouter } from "next/navigation";
+import { checkUserSubscription, createSubscription, SUBSCRIPTION_PLANS } from "@/lib/subscription";
 
 const favoriteBooks = [
   {
@@ -77,44 +77,25 @@ const readingHistory = [
   },
 ];
 
-function UserDashboardContent() {
+export default function UserDashboard() {
   const [activeTab, setActiveTab] = useState<"reading" | "favorites" | "profile" | "subscription">("reading");
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [subscription, setSubscription] = useState<any>(null);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
-  const [isRedirecting, setIsRedirecting] = useState(false);
+  const [processingPayment, setProcessingPayment] = useState(false);
   const router = useRouter();
-  const searchParams = useSearchParams();
 
   useEffect(() => {
     checkAuth();
-    
-    // Verificar se voltou do checkout com sucesso
-    const success = searchParams.get('success');
-    if (success === 'true') {
-      // Recarregar assinatura após sucesso
-      setTimeout(() => {
-        checkAuth();
-      }, 2000);
-    }
   }, []);
 
   const checkAuth = async () => {
-    if (isRedirecting) return; // Evitar múltiplas verificações durante redirecionamento
-    
-    if (!supabase) {
-      setIsRedirecting(true);
-      router.replace("/login");
-      return;
-    }
-
     try {
       const { data: { user }, error } = await supabase.auth.getUser();
       
       if (error || !user) {
-        setIsRedirecting(true);
-        router.replace("/login");
+        router.push("/login");
         return;
       }
 
@@ -127,18 +108,37 @@ function UserDashboardContent() {
       setLoading(false);
     } catch (error) {
       console.error("Erro ao verificar autenticação:", error);
-      if (!isRedirecting) {
-        setIsRedirecting(true);
-        router.replace("/login");
-      }
+      router.push("/login");
     }
   };
 
   const handleLogout = async () => {
-    if (!supabase) return;
-    
     await supabase.auth.signOut();
-    router.replace("/");
+    router.push("/");
+  };
+
+  const handleSelectPlan = async (planType: 'monthly' | 'quarterly' | 'annual') => {
+    if (!user) return;
+
+    setProcessingPayment(true);
+    try {
+      // Simular processamento de pagamento
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Criar assinatura
+      const newSubscription = await createSubscription(user.id, planType);
+      setSubscription(newSubscription);
+      setShowSubscriptionModal(false);
+      
+      // Mostrar mensagem de sucesso
+      alert('Assinatura ativada com sucesso! 🎉');
+      setActiveTab('subscription');
+    } catch (error) {
+      console.error('Erro ao processar pagamento:', error);
+      alert('Erro ao processar pagamento. Tente novamente.');
+    } finally {
+      setProcessingPayment(false);
+    }
   };
 
   if (loading) {
@@ -452,14 +452,15 @@ function UserDashboardContent() {
                         </div>
 
                         <button
-                          onClick={() => setShowSubscriptionModal(true)}
+                          onClick={() => handleSelectPlan(plan.type)}
+                          disabled={processingPayment}
                           className={`w-full py-3 rounded-xl font-bold transition-all duration-300 ${
                             plan.featured
                               ? 'bg-pink-500 text-white hover:bg-pink-600 hover:shadow-lg'
                               : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
-                          }`}
+                          } disabled:opacity-50 disabled:cursor-not-allowed`}
                         >
-                          Assinar Agora
+                          {processingPayment ? 'Processando...' : 'Assinar Agora'}
                         </button>
                       </div>
                     ))}
@@ -528,29 +529,11 @@ function UserDashboardContent() {
       <Footer />
 
       {/* Subscription Modal */}
-      {user && (
-        <SubscriptionModal
-          isOpen={showSubscriptionModal}
-          onClose={() => setShowSubscriptionModal(false)}
-          userId={user.id}
-          userEmail={user.email || ''}
-        />
-      )}
+      <SubscriptionModal
+        isOpen={showSubscriptionModal}
+        onClose={() => setShowSubscriptionModal(false)}
+        onSelectPlan={handleSelectPlan}
+      />
     </div>
-  );
-}
-
-export default function UserDashboard() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-gradient-to-b from-white to-pink-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando...</p>
-        </div>
-      </div>
-    }>
-      <UserDashboardContent />
-    </Suspense>
   );
 }

@@ -3,27 +3,153 @@
 import Header from "@/components/custom/Header";
 import Footer from "@/components/custom/Footer";
 import BookCard from "@/components/custom/BookCard";
-import { ChevronRight, TrendingUp, Sparkles, Star } from "lucide-react";
+import { ChevronLeft, ChevronRight, TrendingUp, Sparkles, Clock, Star, Trophy } from "lucide-react";
 import Link from "next/link";
-import { booksData } from "@/lib/books-data";
+import { useState } from "react";
+
+// Mock data
+const featuredBook = {
+  id: "1",
+  title: "Amor Proibido: O Segredo do Bilionário",
+  author: "Ana Silva",
+  cover: "",
+  rating: 4.8,
+  chapters: 120,
+  genre: "Romance",
+  description: "Uma história envolvente sobre amor, segredos e redenção. Quando Emma conhece o misterioso CEO Marcus, ela não imagina que sua vida mudaria para sempre.",
+  views: "2.5M",
+};
+
+const trendingBooks = [
+  {
+    id: "2",
+    title: "Destino Entrelaçado",
+    author: "Beatriz Costa",
+    cover: "",
+    rating: 4.9,
+    chapters: 95,
+    genre: "Romance",
+    views: "1.8M",
+  },
+  {
+    id: "3",
+    title: "Paixão Inesperada",
+    author: "Carlos Mendes",
+    cover: "",
+    rating: 4.7,
+    chapters: 80,
+    genre: "Drama",
+    views: "1.5M",
+  },
+  {
+    id: "4",
+    title: "Corações Divididos",
+    author: "Diana Oliveira",
+    cover: "",
+    rating: 4.6,
+    chapters: 110,
+    genre: "Romance",
+    views: "1.3M",
+  },
+];
+
+const newReleases = [
+  {
+    id: "7",
+    title: "Lua de Mel Falsa",
+    author: "Gabriel Rocha",
+    cover: "",
+    rating: 4.4,
+    chapters: 45,
+    genre: "Romance",
+    views: "850K",
+  },
+  {
+    id: "8",
+    title: "O Príncipe Secreto",
+    author: "Helena Martins",
+    cover: "",
+    rating: 4.7,
+    chapters: 60,
+    genre: "Fantasia",
+    views: "920K",
+  },
+  {
+    id: "9",
+    title: "Casamento por Contrato",
+    author: "Igor Ferreira",
+    cover: "",
+    rating: 4.6,
+    chapters: 55,
+    genre: "Romance",
+    views: "780K",
+  },
+  {
+    id: "10",
+    title: "Amor Além do Tempo",
+    author: "Julia Alves",
+    cover: "",
+    rating: 4.8,
+    chapters: 70,
+    genre: "Fantasia",
+    views: "1M",
+  },
+  {
+    id: "15",
+    title: "Segredos do Coração",
+    author: "Pedro Almeida",
+    cover: "",
+    rating: 4.5,
+    chapters: 65,
+    genre: "Romance",
+    views: "890K",
+  },
+];
+
+const popularBooks = [
+  {
+    id: "11",
+    title: "A Herdeira Esquecida",
+    author: "Karen Silva",
+    cover: "",
+    rating: 4.9,
+    chapters: 130,
+    genre: "Drama",
+    views: "3.2M",
+  },
+  {
+    id: "12",
+    title: "Vingança Doce",
+    author: "Lucas Pereira",
+    cover: "",
+    rating: 4.7,
+    chapters: 105,
+    genre: "Drama",
+    views: "2.8M",
+  },
+  {
+    id: "13",
+    title: "Coração de Gelo",
+    author: "Marina Costa",
+    cover: "",
+    rating: 4.8,
+    chapters: 115,
+    genre: "Romance",
+    views: "2.6M",
+  },
+  {
+    id: "14",
+    title: "Paixão Proibida",
+    author: "Nicolas Souza",
+    cover: "",
+    rating: 4.6,
+    chapters: 98,
+    genre: "Romance",
+    views: "2.4M",
+  },
+];
 
 export default function Home() {
-  // Pegar livro em destaque (primeiro da lista)
-  const featuredBook = booksData[0];
-  
-  // Pegar top 3 em alta (livros com mais views)
-  const trendingBooks = [...booksData]
-    .sort((a, b) => parseFloat(b.views) - parseFloat(a.views))
-    .slice(0, 3);
-  
-  // Pegar lançamentos (últimos 5 livros)
-  const newReleases = booksData.slice(-5);
-  
-  // Pegar populares (4 livros com melhor rating)
-  const popularBooks = [...booksData]
-    .sort((a, b) => b.rating - a.rating)
-    .slice(0, 4);
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-pink-50">
       <Header />
@@ -95,6 +221,9 @@ export default function Home() {
                     <div className="w-16 h-16 bg-gray-300 rounded-full flex items-center justify-center text-2xl font-bold text-white shadow-lg">
                       2
                     </div>
+                    <div className="absolute -top-1 -right-1 w-6 h-6 bg-gray-400 rounded-full flex items-center justify-center">
+                      <Trophy className="w-3 h-3 text-white" />
+                    </div>
                   </div>
                   <Link href={`/livro/${trendingBooks[1].id}`} className="group">
                     <div className="bg-white rounded-xl p-3 shadow-md hover:shadow-xl transition-all duration-300 group-hover:scale-105">
@@ -117,6 +246,9 @@ export default function Home() {
                     <div className="w-20 h-20 bg-yellow-400 rounded-full flex items-center justify-center text-3xl font-bold text-white shadow-xl">
                       1
                     </div>
+                    <div className="absolute -top-2 -right-2 w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center">
+                      <Trophy className="w-4 h-4 text-white" />
+                    </div>
                   </div>
                   <Link href={`/livro/${trendingBooks[0].id}`} className="group">
                     <div className="bg-white rounded-xl p-4 shadow-xl hover:shadow-2xl transition-all duration-300 group-hover:scale-105">
@@ -138,6 +270,9 @@ export default function Home() {
                   <div className="relative mb-2">
                     <div className="w-16 h-16 bg-orange-400 rounded-full flex items-center justify-center text-2xl font-bold text-white shadow-lg">
                       3
+                    </div>
+                    <div className="absolute -top-1 -right-1 w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center">
+                      <Trophy className="w-3 h-3 text-white" />
                     </div>
                   </div>
                   <Link href={`/livro/${trendingBooks[2].id}`} className="group">
@@ -207,7 +342,7 @@ export default function Home() {
               </div>
               <h2 className="text-3xl font-bold text-gray-900">Romances Populares</h2>
             </div>
-            <Link href="/explorar" className="text-pink-500 hover:text-pink-600 font-medium flex items-center space-x-1">
+            <Link href="/populares" className="text-pink-500 hover:text-pink-600 font-medium flex items-center space-x-1">
               <span>Ver todos</span>
               <ChevronRight className="w-5 h-5" />
             </Link>

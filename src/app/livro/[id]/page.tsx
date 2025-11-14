@@ -1,236 +1,338 @@
 "use client";
 
-import { useParams } from "next/navigation";
-import { getBookById } from "@/lib/books-data";
 import Header from "@/components/custom/Header";
 import Footer from "@/components/custom/Footer";
+import BookCard from "@/components/custom/BookCard";
+import { Heart, Star, Clock, Eye, Share2, BookOpen, Lock, Crown } from "lucide-react";
 import Link from "next/link";
-import { Star, BookOpen, Eye, Clock, ArrowLeft, Lock } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { checkUserSubscription, getFreeChaptersCount } from "@/lib/subscription";
 
-export default function BookDetailPage() {
-  const params = useParams();
-  const bookId = params.id as string;
-  const book = getBookById(bookId);
+// Mock data
+const bookData = {
+  id: "1",
+  title: "Amor Proibido: O Segredo do Bilionário",
+  author: "Ana Silva",
+  cover: "",
+  rating: 4.8,
+  totalRatings: 12500,
+  chapters: 120,
+  genre: "Romance",
+  tags: ["Romance", "Drama", "CEO", "Amor Proibido"],
+  views: "2.5M",
+  status: "Completo",
+  lastUpdate: "Há 2 dias",
+  description: `Emma sempre foi uma mulher independente e focada em sua carreira. Trabalhando como assistente executiva em uma das maiores empresas do país, ela nunca imaginou que sua vida mudaria completamente ao conhecer Marcus Blackwood, o misterioso e sedutor CEO.
+
+Marcus é conhecido por sua frieza nos negócios e por manter sua vida pessoal em absoluto sigilo. Mas quando Emma entra em sua vida, algo desperta nele - um sentimento que ele jurou nunca mais experimentar.
+
+Entre reuniões corporativas e jantares de negócios, uma química inegável surge entre eles. Mas segredos do passado de Marcus ameaçam destruir qualquer chance de felicidade. Emma precisará decidir se está disposta a arriscar seu coração por um amor que pode ser impossível.
+
+Uma história envolvente sobre amor, redenção e a coragem de seguir o coração, mesmo quando tudo parece estar contra você.`,
+};
+
+const chapters = Array.from({ length: 120 }, (_, i) => ({
+  number: i + 1,
+  title: `Capítulo ${i + 1}: ${
+    i === 0 ? "O Encontro" :
+    i === 1 ? "Primeiras Impressões" :
+    i === 2 ? "Tensão no Ar" :
+    i === 10 ? "O Beijo" :
+    i === 50 ? "Revelações" :
+    i === 100 ? "A Verdade" :
+    i === 119 ? "Para Sempre" :
+    `Parte ${i + 1}`
+  }`,
+  date: "Há 3 dias",
+  views: Math.floor(Math.random() * 50000) + 10000,
+}));
+
+const recommendedBooks = [
+  {
+    id: "2",
+    title: "Destino Entrelaçado",
+    author: "Beatriz Costa",
+    cover: "",
+    rating: 4.9,
+    chapters: 95,
+    genre: "Romance",
+    views: "1.8M",
+  },
+  {
+    id: "3",
+    title: "Paixão Inesperada",
+    author: "Carlos Mendes",
+    cover: "",
+    rating: 4.7,
+    chapters: 80,
+    genre: "Drama",
+    views: "1.5M",
+  },
+  {
+    id: "4",
+    title: "Corações Divididos",
+    author: "Diana Oliveira",
+    cover: "",
+    rating: 4.6,
+    chapters: 110,
+    genre: "Romance",
+    views: "1.3M",
+  },
+  {
+    id: "5",
+    title: "Amor em Paris",
+    author: "Eduardo Santos",
+    cover: "",
+    rating: 4.8,
+    chapters: 75,
+    genre: "Romance",
+    views: "1.2M",
+  },
+];
+
+export default function BookPage({ params }: { params: { id: string } }) {
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [showAllChapters, setShowAllChapters] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [user, setUser] = useState<any>(null);
   const [hasSubscription, setHasSubscription] = useState(false);
-  const [loading, setLoading] = useState(true);
+
+  const freeChaptersCount = getFreeChaptersCount();
 
   useEffect(() => {
-    checkSubscription();
+    setMounted(true);
+    checkUserAccess();
   }, []);
 
-  async function checkSubscription() {
+  const checkUserAccess = async () => {
     try {
-      if (!supabase) return;
       const { data: { user } } = await supabase.auth.getUser();
-      
+      setUser(user);
+
       if (user) {
-        const { data: subscription } = await supabase
-          .from('subscriptions')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('status', 'active')
-          .single();
-        
-        setHasSubscription(!!subscription);
+        const subscription = await checkUserSubscription(user.id);
+        setHasSubscription(subscription !== null);
       }
     } catch (error) {
-      console.error('Erro ao verificar assinatura:', error);
-    } finally {
-      setLoading(false);
+      console.error("Erro ao verificar acesso:", error);
     }
-  }
+  };
 
-  if (!book) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-white to-pink-50">
-        <Header />
-        <div className="pt-24 pb-12 px-4 sm:px-6 lg:px-8">
-          <div className="max-w-4xl mx-auto text-center">
-            <h1 className="text-4xl font-bold text-gray-900 mb-4">Livro não encontrado</h1>
-            <Link href="/" className="text-pink-500 hover:text-pink-600 font-medium">
-              Voltar para a página inicial
-            </Link>
-          </div>
-        </div>
-        <Footer />
-      </div>
-    );
-  }
+  const displayedChapters = showAllChapters ? chapters : chapters.slice(0, 10);
 
-  const freeChapters = 3;
+  const isChapterLocked = (chapterNumber: number) => {
+    return chapterNumber > freeChaptersCount && !hasSubscription;
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-pink-50">
       <Header />
 
-      <div className="pt-24 pb-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-6xl mx-auto">
-          {/* Botão Voltar */}
-          <Link 
-            href="/"
-            className="inline-flex items-center space-x-2 text-gray-600 hover:text-pink-500 mb-6 transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-            <span>Voltar</span>
-          </Link>
+      <div className="pt-20 pb-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
+          {/* Subscription Banner (if not subscribed) */}
+          {!hasSubscription && (
+            <div className="bg-gradient-to-r from-purple-500 to-pink-500 rounded-2xl p-6 mb-8 text-white shadow-xl">
+              <div className="flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0">
+                <div className="flex items-center space-x-4">
+                  <Crown className="w-12 h-12" />
+                  <div>
+                    <h3 className="text-xl font-bold mb-1">
+                      Primeiros {freeChaptersCount} capítulos grátis!
+                    </h3>
+                    <p className="text-white/90">
+                      Assine para ter acesso ilimitado a partir de R$ 10,97/mês
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href="/painel"
+                  className="px-8 py-3 bg-white text-purple-600 rounded-full font-bold hover:shadow-lg transition-all duration-300"
+                >
+                  Ver Planos
+                </Link>
+              </div>
+            </div>
+          )}
 
-          {/* Header do Livro */}
-          <div className="bg-white rounded-3xl shadow-xl overflow-hidden mb-8">
-            <div className="md:flex">
-              {/* Capa */}
-              <div className="md:w-1/3 bg-gradient-to-br from-pink-400 to-pink-600 p-8 flex items-center justify-center">
-                <div className="text-center text-white">
-                  <div className="text-8xl mb-4">📖</div>
-                  <div className="inline-flex items-center space-x-2 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-full">
-                    <span className="text-sm font-medium">{book.ageRating}</span>
+          {/* Book Info Section */}
+          <div className="bg-white rounded-3xl shadow-xl overflow-hidden mb-12">
+            <div className="grid md:grid-cols-3 gap-8 p-6 md:p-10">
+              {/* Book Cover */}
+              <div className="md:col-span-1">
+                <div className="relative aspect-[2/3] bg-gradient-to-br from-pink-100 to-purple-100 rounded-2xl overflow-hidden shadow-lg">
+                  <div className="absolute inset-0 flex items-center justify-center text-gray-400">
+                    <div className="text-center">
+                      <div className="text-8xl mb-4">📖</div>
+                      <div className="text-lg font-medium px-4">{bookData.title}</div>
+                    </div>
+                  </div>
+                  <div className="absolute top-4 left-4 px-3 py-1 bg-pink-500 text-white text-sm font-medium rounded-full">
+                    {bookData.status}
                   </div>
                 </div>
               </div>
 
-              {/* Informações */}
-              <div className="md:w-2/3 p-8">
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {book.tags.map((tag) => (
+              {/* Book Details */}
+              <div className="md:col-span-2">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">
+                      {bookData.title}
+                    </h1>
+                    <p className="text-lg text-gray-600 mb-4">por {bookData.author}</p>
+                  </div>
+                  <button
+                    onClick={() => setIsFavorite(!isFavorite)}
+                    className="p-3 bg-pink-50 hover:bg-pink-100 rounded-full transition-colors"
+                  >
+                    <Heart
+                      className={`w-6 h-6 ${
+                        isFavorite ? "fill-pink-500 text-pink-500" : "text-gray-600"
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Stats */}
+                <div className="flex flex-wrap gap-6 mb-6">
+                  <div className="flex items-center space-x-2">
+                    <Star className="w-5 h-5 fill-yellow-400 text-yellow-400" />
+                    <span className="font-bold text-gray-900">{bookData.rating}</span>
+                    <span className="text-gray-500">
+                      ({mounted ? bookData.totalRatings.toLocaleString('pt-BR') : bookData.totalRatings} avaliações)
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <BookOpen className="w-5 h-5 text-gray-600" />
+                    <span className="text-gray-700">{bookData.chapters} capítulos</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Eye className="w-5 h-5 text-gray-600" />
+                    <span className="text-gray-700">{bookData.views} leituras</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Clock className="w-5 h-5 text-gray-600" />
+                    <span className="text-gray-700">{bookData.lastUpdate}</span>
+                  </div>
+                </div>
+
+                {/* Tags */}
+                <div className="flex flex-wrap gap-2 mb-6">
+                  {bookData.tags.map((tag) => (
                     <span
                       key={tag}
-                      className="px-3 py-1 bg-pink-100 text-pink-600 rounded-full text-sm font-medium"
+                      className="px-4 py-2 bg-pink-50 text-pink-600 rounded-full text-sm font-medium"
                     >
                       {tag}
                     </span>
                   ))}
                 </div>
 
-                <h1 className="text-4xl font-bold text-gray-900 mb-2">{book.title}</h1>
-                <p className="text-xl text-gray-600 mb-6">por {book.author}</p>
-
-                {/* Estatísticas */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  <div className="text-center p-4 bg-pink-50 rounded-xl">
-                    <Star className="w-6 h-6 text-pink-500 mx-auto mb-2 fill-pink-500" />
-                    <div className="text-2xl font-bold text-gray-900">{book.rating}</div>
-                    <div className="text-sm text-gray-600">Avaliação</div>
-                  </div>
-                  <div className="text-center p-4 bg-pink-50 rounded-xl">
-                    <BookOpen className="w-6 h-6 text-pink-500 mx-auto mb-2" />
-                    <div className="text-2xl font-bold text-gray-900">{book.chapters}</div>
-                    <div className="text-sm text-gray-600">Capítulos</div>
-                  </div>
-                  <div className="text-center p-4 bg-pink-50 rounded-xl">
-                    <Eye className="w-6 h-6 text-pink-500 mx-auto mb-2" />
-                    <div className="text-2xl font-bold text-gray-900">{book.views}</div>
-                    <div className="text-sm text-gray-600">Leituras</div>
-                  </div>
-                  <div className="text-center p-4 bg-pink-50 rounded-xl">
-                    <Clock className="w-6 h-6 text-pink-500 mx-auto mb-2" />
-                    <div className="text-2xl font-bold text-gray-900">{book.genre}</div>
-                    <div className="text-sm text-gray-600">Gênero</div>
-                  </div>
+                {/* Description */}
+                <div className="mb-6">
+                  <h2 className="text-xl font-bold text-gray-900 mb-3">Sinopse</h2>
+                  <p className="text-gray-700 leading-relaxed whitespace-pre-line">
+                    {bookData.description}
+                  </p>
                 </div>
 
-                {/* Botão Começar a Ler */}
-                <Link
-                  href={`/livro/${book.id}/capitulo/1`}
-                  className="w-full block text-center px-8 py-4 bg-pink-500 text-white rounded-full font-bold hover:bg-pink-600 transition-all duration-300 shadow-lg hover:shadow-xl"
-                >
-                  Começar a Ler
-                </Link>
+                {/* Action Buttons */}
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <Link
+                    href={`/livro/${bookData.id}/capitulo/1`}
+                    className="flex-1 py-4 bg-pink-500 text-white text-center rounded-full font-bold hover:shadow-lg transition-all duration-300"
+                  >
+                    Começar a Ler
+                  </Link>
+                  <button className="px-8 py-4 bg-pink-50 text-pink-600 rounded-full font-bold hover:bg-pink-100 transition-colors flex items-center justify-center space-x-2">
+                    <Share2 className="w-5 h-5" />
+                    <span>Compartilhar</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Sinopse */}
-          <div className="bg-white rounded-3xl shadow-xl p-8 mb-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">Sinopse</h2>
-            <p className="text-gray-700 leading-relaxed text-lg">{book.synopsis}</p>
-          </div>
-
-          {/* Lista de Capítulos */}
-          <div className="bg-white rounded-3xl shadow-xl p-8">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">Capítulos</h2>
-              {!hasSubscription && (
-                <div className="text-sm text-gray-600">
-                  {freeChapters} capítulos gratuitos
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-3">
-              {book.fullStory.map((chapter) => {
-                const isFree = chapter.id <= freeChapters;
-                const isLocked = !isFree && !hasSubscription;
-
-                return (
-                  <Link
-                    key={chapter.id}
-                    href={isLocked ? "#" : `/livro/${book.id}/capitulo/${chapter.id}`}
-                    className={`block p-4 rounded-xl transition-all duration-300 ${
-                      isLocked
-                        ? "bg-gray-100 cursor-not-allowed opacity-60"
-                        : "bg-pink-50 hover:bg-pink-100 hover:shadow-md"
-                    }`}
-                    onClick={(e) => {
-                      if (isLocked) {
-                        e.preventDefault();
-                        alert("Assine para desbloquear todos os capítulos!");
-                      }
-                    }}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3 mb-2">
-                          <span className="text-sm font-bold text-pink-500">
-                            Capítulo {chapter.id}
-                          </span>
-                          {isFree && (
-                            <span className="px-2 py-1 bg-green-100 text-green-600 rounded-full text-xs font-medium">
-                              Grátis
-                            </span>
+          {/* Chapters List */}
+          <div className="bg-white rounded-3xl shadow-xl overflow-hidden mb-12">
+            <div className="p-6 md:p-10">
+              <h2 className="text-2xl font-bold text-gray-900 mb-6">Lista de Capítulos</h2>
+              <div className="space-y-2">
+                {displayedChapters.map((chapter) => {
+                  const locked = isChapterLocked(chapter.number);
+                  
+                  return (
+                    <Link
+                      key={chapter.number}
+                      href={`/livro/${bookData.id}/capitulo/${chapter.number}`}
+                      className={`block p-4 rounded-xl transition-colors group ${
+                        locked 
+                          ? 'bg-gray-50 hover:bg-gray-100' 
+                          : 'bg-pink-50 hover:bg-pink-100'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 flex items-center space-x-3">
+                          {locked ? (
+                            <Lock className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                          ) : (
+                            <BookOpen className="w-5 h-5 text-pink-500 flex-shrink-0" />
                           )}
-                          {isLocked && (
-                            <span className="px-2 py-1 bg-gray-200 text-gray-600 rounded-full text-xs font-medium flex items-center space-x-1">
-                              <Lock className="w-3 h-3" />
-                              <span>Bloqueado</span>
-                            </span>
-                          )}
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2">
+                              <h3 className={`font-bold transition-colors ${
+                                locked 
+                                  ? 'text-gray-500' 
+                                  : 'text-gray-900 group-hover:text-pink-600'
+                              }`}>
+                                {chapter.title}
+                              </h3>
+                              {locked && (
+                                <span className="px-2 py-0.5 bg-purple-100 text-purple-600 text-xs font-bold rounded-full">
+                                  Premium
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center space-x-4 mt-1 text-sm text-gray-600">
+                              <span>{chapter.date}</span>
+                              <span className="flex items-center space-x-1">
+                                <Eye className="w-4 h-4" />
+                                <span>{mounted ? chapter.views.toLocaleString('pt-BR') : chapter.views}</span>
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                        <h3 className="font-bold text-gray-900 mb-1">{chapter.title}</h3>
-                        <p className="text-sm text-gray-600">
-                          {chapter.wordCount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".")} palavras
-                        </p>
-                      </div>
-                      <div className="ml-4">
-                        {isLocked ? (
-                          <Lock className="w-6 h-6 text-gray-400" />
+                        {locked ? (
+                          <Crown className="w-5 h-5 text-purple-500" />
                         ) : (
-                          <BookOpen className="w-6 h-6 text-pink-500" />
+                          <BookOpen className="w-5 h-5 text-gray-400 group-hover:text-pink-500 transition-colors" />
                         )}
                       </div>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-
-            {/* CTA Assinatura */}
-            {!hasSubscription && (
-              <div className="mt-8 p-6 bg-gradient-to-r from-pink-500 to-pink-600 rounded-2xl text-white text-center">
-                <h3 className="text-2xl font-bold mb-2">
-                  Desbloqueie Todos os Capítulos
-                </h3>
-                <p className="mb-4 text-white/90">
-                  Assine agora e tenha acesso ilimitado a todos os livros e capítulos!
-                </p>
-                <Link
-                  href="/painel"
-                  className="inline-block px-8 py-3 bg-white text-pink-600 rounded-full font-bold hover:bg-pink-50 transition-all duration-300 shadow-lg"
-                >
-                  Ver Planos
-                </Link>
+                    </Link>
+                  );
+                })}
               </div>
-            )}
+              {!showAllChapters && chapters.length > 10 && (
+                <button
+                  onClick={() => setShowAllChapters(true)}
+                  className="w-full mt-6 py-3 bg-pink-500 text-white rounded-full font-bold hover:shadow-lg transition-all duration-300"
+                >
+                  Ver Todos os {chapters.length} Capítulos
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Recommended Books */}
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">Você Também Pode Gostar</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+              {recommendedBooks.map((book) => (
+                <BookCard key={book.id} {...book} />
+              ))}
+            </div>
           </div>
         </div>
       </div>
