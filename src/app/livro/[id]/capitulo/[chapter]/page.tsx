@@ -2,239 +2,306 @@
 
 import Header from "@/components/custom/Header";
 import Footer from "@/components/custom/Footer";
-import { ChevronLeft, ChevronRight, Sun, Moon, Type, BookOpen, Home } from "lucide-react";
+import SubscriptionModal from "@/components/custom/SubscriptionModal";
+import { ChevronLeft, ChevronRight, BookOpen, Lock, Crown } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
+import { hasAccessToChapter, getFreeChaptersCount, createSubscription } from "@/lib/subscription";
 
-const chapterContent = `Emma respirou fundo antes de entrar no imponente prédio da Blackwood Enterprises. Aquele seria seu primeiro dia como assistente executiva, e ela estava determinada a causar uma boa impressão.
+// Mock data do capítulo
+const getChapterContent = (chapterNumber: number) => ({
+  number: chapterNumber,
+  title: `Capítulo ${chapterNumber}: ${
+    chapterNumber === 1 ? "O Encontro" :
+    chapterNumber === 2 ? "Primeiras Impressões" :
+    chapterNumber === 3 ? "Tensão no Ar" :
+    chapterNumber === 4 ? "O Convite" :
+    chapterNumber === 5 ? "Jantar Inesperado" :
+    `Parte ${chapterNumber}`
+  }`,
+  content: `Este é o conteúdo do capítulo ${chapterNumber}.
 
-O lobby era ainda mais impressionante do que ela imaginava. Mármore italiano, lustres de cristal e uma atmosfera de poder e sofisticação que fazia seu coração acelerar.
+Emma acordou cedo naquela manhã, com um misto de ansiedade e expectativa. Hoje seria seu primeiro dia trabalhando diretamente com Marcus Blackwood, o CEO mais misterioso e cobiçado da cidade.
 
-"Você deve ser Emma Carter", uma voz feminina a tirou de seus pensamentos. Uma mulher elegante de terno azul marinho se aproximou com um sorriso profissional. "Sou Sarah, da equipe de RH. Bem-vinda à Blackwood Enterprises."
+Ao entrar no escritório, ela não podia imaginar que sua vida estava prestes a mudar completamente. Marcus estava de pé, olhando pela janela panorâmica que dava vista para toda a cidade.
 
-Emma apertou sua mão com firmeza. "Muito prazer. Estou ansiosa para começar."
+"Bom dia, Srta. Thompson", disse ele sem se virar, sua voz profunda ecoando pela sala.
 
-"Ótimo. Vou levá-la até o 45º andar. O Sr. Blackwood está esperando por você."
+Emma sentiu um arrepio percorrer sua espinha. Como ele sabia que era ela?
 
-O elevador subiu rapidamente, e Emma sentiu seu estômago revirar. Não era nervosismo comum - era algo mais. Uma sensação estranha de que sua vida estava prestes a mudar completamente.
+"Bom dia, Sr. Blackwood", respondeu, tentando manter a voz firme.
 
-As portas se abriram revelando um corredor amplo com vista panorâmica da cidade. Sarah a guiou até uma porta de madeira escura com uma placa dourada: "Marcus Blackwood - CEO".
+Ele finalmente se virou, e seus olhos azuis penetrantes encontraram os dela. Por um momento, o tempo pareceu parar.
 
-"Pode entrar", Sarah disse com um aceno de cabeça antes de se retirar.
+"Espero que esteja preparada. Não aceito nada menos que perfeição", disse ele, com um leve sorriso no canto dos lábios.
 
-Emma bateu levemente na porta.
+Emma engoliu em seco. Este seria um dia muito longo...
 
-"Entre", uma voz profunda e autoritária respondeu.
+[O capítulo continua com mais 2000 palavras de desenvolvimento da história, diálogos envolventes e momentos de tensão romântica entre os personagens principais.]`,
+  date: "Há 3 dias",
+  views: Math.floor(Math.random() * 50000) + 10000,
+});
 
-Ela abriu a porta e seu coração parou por um momento. Atrás de uma mesa executiva estava o homem mais atraente que ela já tinha visto. Cabelos escuros perfeitamente penteados, olhos azuis penetrantes e uma mandíbula marcada que parecia esculpida em mármore.
-
-Marcus Blackwood levantou os olhos dos documentos que analisava e seus olhares se encontraram. Por um breve momento, algo passou entre eles - uma faísca, uma conexão inexplicável.
-
-"Srta. Carter", ele disse, sua voz enviando um arrepio pela espinha dela. "Sente-se, por favor."
-
-Emma se aproximou, tentando manter a compostura profissional, mas era impossível ignorar a presença magnética dele.
-
-"Eu revisei seu currículo", Marcus continuou, seus olhos nunca deixando os dela. "Impressionante. Formada com honras, experiência em empresas de prestígio. Mas me diga, por que você quer trabalhar aqui?"
-
-Emma respirou fundo. "Porque a Blackwood Enterprises é líder em inovação. Quero fazer parte de algo maior, aprender com os melhores."
-
-Um sorriso quase imperceptível tocou os lábios dele. "Ambiciosa. Eu gosto disso."
-
-Ele se levantou e caminhou até a janela, as mãos nos bolsos da calça do terno impecável. "Este trabalho não será fácil, Srta. Carter. Eu sou exigente, perfeccionista. Espero excelência em tudo."
-
-"Eu não esperaria menos", Emma respondeu, surpreendendo-se com sua própria confiança.
-
-Marcus se virou para encará-la, e novamente aquela conexão elétrica passou entre eles. Ele deu alguns passos em sua direção, parando a poucos metros dela.
-
-"Então bem-vinda à equipe", ele estendeu a mão.
-
-Quando Emma tocou sua mão, foi como se uma corrente elétrica percorresse seu corpo. Pelos olhos dele, ela percebeu que ele também havia sentido.
-
-Mas tão rapidamente quanto o momento surgiu, ele se desfez. Marcus soltou sua mão e voltou para trás da mesa, sua expressão voltando à máscara profissional.
-
-"Sarah lhe mostrará sua estação de trabalho. Espero você aqui amanhã às 7h em ponto. Temos uma reunião importante."
-
-"Estarei aqui", Emma disse, se levantando.
-
-Enquanto caminhava em direção à porta, ela sentiu os olhos dele em suas costas. E quando se virou para um último olhar, ele ainda a observava com uma expressão que ela não conseguia decifrar.
-
-Aquele seria apenas o começo de uma história que mudaria suas vidas para sempre.`;
+const bookData = {
+  id: "1",
+  title: "Amor Proibido: O Segredo do Bilionário",
+  author: "Ana Silva",
+  totalChapters: 120,
+};
 
 export default function ChapterPage({
   params,
 }: {
   params: { id: string; chapter: string };
 }) {
-  const [isDarkMode, setIsDarkMode] = useState(false);
-  const [fontSize, setFontSize] = useState(18);
+  const [user, setUser] = useState<any>(null);
+  const [hasAccess, setHasAccess] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [processingPayment, setProcessingPayment] = useState(false);
+  const router = useRouter();
 
-  const bookTitle = "Amor Proibido: O Segredo do Bilionário";
   const chapterNumber = parseInt(params.chapter);
-  const chapterTitle = `Capítulo ${chapterNumber}: O Encontro`;
+  const chapter = getChapterContent(chapterNumber);
+  const freeChaptersCount = getFreeChaptersCount();
 
-  return (
-    <div className={`min-h-screen ${isDarkMode ? "bg-gray-900" : "bg-white"}`}>
-      <Header />
+  useEffect(() => {
+    checkAccess();
+  }, [chapterNumber]);
 
-      {/* Reading Controls */}
-      <div className={`fixed top-16 left-0 right-0 ${isDarkMode ? "bg-gray-800" : "bg-white"} border-b ${isDarkMode ? "border-gray-700" : "border-pink-100"} z-40`}>
-        <div className="max-w-4xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            {/* Back to Book */}
-            <Link
-              href={`/livro/${params.id}`}
-              className={`flex items-center space-x-2 ${isDarkMode ? "text-gray-300 hover:text-white" : "text-gray-700 hover:text-pink-600"} transition-colors`}
-            >
-              <Home className="w-5 h-5" />
-              <span className="hidden sm:inline">Voltar ao Livro</span>
-            </Link>
+  const checkAccess = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
 
-            {/* Reading Controls */}
-            <div className="flex items-center space-x-4">
-              {/* Font Size */}
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => setFontSize(Math.max(14, fontSize - 2))}
-                  className={`p-2 ${isDarkMode ? "hover:bg-gray-700" : "hover:bg-pink-50"} rounded-lg transition-colors`}
-                >
-                  <Type className="w-4 h-4" />
-                </button>
-                <span className={`text-sm ${isDarkMode ? "text-gray-300" : "text-gray-700"}`}>
-                  {fontSize}px
-                </span>
-                <button
-                  onClick={() => setFontSize(Math.min(24, fontSize + 2))}
-                  className={`p-2 ${isDarkMode ? "hover:bg-gray-700" : "hover:bg-pink-50"} rounded-lg transition-colors`}
-                >
-                  <Type className="w-5 h-5" />
-                </button>
-              </div>
+      const access = await hasAccessToChapter(user?.id, chapterNumber);
+      setHasAccess(access);
+      setLoading(false);
+    } catch (error) {
+      console.error("Erro ao verificar acesso:", error);
+      setLoading(false);
+    }
+  };
 
-              {/* Dark Mode Toggle */}
-              <button
-                onClick={() => setIsDarkMode(!isDarkMode)}
-                className={`p-2 ${isDarkMode ? "hover:bg-gray-700" : "hover:bg-pink-50"} rounded-lg transition-colors`}
-              >
-                {isDarkMode ? (
-                  <Sun className="w-5 h-5 text-yellow-400" />
-                ) : (
-                  <Moon className="w-5 h-5 text-gray-700" />
-                )}
-              </button>
-            </div>
-          </div>
+  const handleSelectPlan = async (planType: 'monthly' | 'quarterly' | 'annual') => {
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+
+    setProcessingPayment(true);
+    try {
+      // Simular processamento de pagamento
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Criar assinatura
+      await createSubscription(user.id, planType);
+      setShowSubscriptionModal(false);
+      
+      // Recarregar acesso
+      await checkAccess();
+      
+      // Mostrar mensagem de sucesso
+      alert('Assinatura ativada com sucesso! 🎉 Agora você tem acesso a todos os capítulos.');
+    } catch (error) {
+      console.error('Erro ao processar pagamento:', error);
+      alert('Erro ao processar pagamento. Tente novamente.');
+    } finally {
+      setProcessingPayment(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-white to-pink-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando capítulo...</p>
         </div>
       </div>
+    );
+  }
 
-      {/* Chapter Content */}
-      <div className="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto">
-          {/* Chapter Header */}
-          <div className="mb-8 text-center">
-            <Link
-              href={`/livro/${params.id}`}
-              className={`text-sm ${isDarkMode ? "text-gray-400 hover:text-gray-300" : "text-gray-600 hover:text-pink-600"} transition-colors mb-2 inline-block`}
-            >
-              {bookTitle}
-            </Link>
-            <h1 className={`text-3xl md:text-4xl font-bold ${isDarkMode ? "text-white" : "text-gray-900"} mb-2`}>
-              {chapterTitle}
-            </h1>
-            <div className={`flex items-center justify-center space-x-4 text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"}`}>
-              <span>Publicado há 3 dias</span>
-              <span>•</span>
-              <span>15.234 visualizações</span>
-            </div>
-          </div>
+  // Se não tem acesso, mostrar paywall
+  if (!hasAccess) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-white to-pink-50">
+        <Header />
 
-          {/* Chapter Text */}
-          <div
-            className={`prose max-w-none ${isDarkMode ? "prose-invert" : ""}`}
-            style={{ fontSize: `${fontSize}px` }}
-          >
-            <div className={`leading-relaxed ${isDarkMode ? "text-gray-300" : "text-gray-800"} whitespace-pre-line`}>
-              {chapterContent}
-            </div>
-          </div>
-
-          {/* Chapter Navigation */}
-          <div className="mt-12 pt-8 border-t border-pink-200">
-            <div className="flex items-center justify-between">
-              {chapterNumber > 1 ? (
-                <Link
-                  href={`/livro/${params.id}/capitulo/${chapterNumber - 1}`}
-                  className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-full font-bold hover:shadow-lg transition-all duration-300"
-                >
-                  <ChevronLeft className="w-5 h-5" />
-                  <span>Capítulo Anterior</span>
-                </Link>
-              ) : (
-                <div></div>
-              )}
-
+        <div className="pt-24 pb-12 px-4 sm:px-6 lg:px-8">
+          <div className="max-w-4xl mx-auto">
+            {/* Breadcrumb */}
+            <div className="mb-6">
               <Link
-                href={`/livro/${params.id}/capitulo/${chapterNumber + 1}`}
-                className="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-full font-bold hover:shadow-lg transition-all duration-300"
+                href={`/livro/${params.id}`}
+                className="text-pink-600 hover:text-pink-700 font-medium flex items-center space-x-2"
               >
-                <span>Próximo Capítulo</span>
-                <ChevronRight className="w-5 h-5" />
+                <ChevronLeft className="w-4 h-4" />
+                <span>Voltar para o livro</span>
               </Link>
             </div>
-          </div>
 
-          {/* Progress Bar */}
-          <div className="mt-8">
-            <div className={`text-sm ${isDarkMode ? "text-gray-400" : "text-gray-600"} mb-2 text-center`}>
-              Capítulo {chapterNumber} de 120
-            </div>
-            <div className={`w-full h-2 ${isDarkMode ? "bg-gray-700" : "bg-pink-100"} rounded-full overflow-hidden`}>
-              <div
-                className="h-full bg-gradient-to-r from-pink-500 to-purple-600 transition-all duration-300"
-                style={{ width: `${(chapterNumber / 120) * 100}%` }}
-              ></div>
+            {/* Locked Content */}
+            <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
+              <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-8 text-white text-center">
+                <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Lock className="w-10 h-10" />
+                </div>
+                <h1 className="text-3xl font-bold mb-2">Capítulo Bloqueado</h1>
+                <p className="text-white/90 text-lg">
+                  Os primeiros {freeChaptersCount} capítulos são gratuitos
+                </p>
+              </div>
+
+              <div className="p-8">
+                <div className="text-center mb-8">
+                  <h2 className="text-2xl font-bold text-gray-900 mb-2">{chapter.title}</h2>
+                  <p className="text-gray-600">
+                    Para continuar lendo, escolha um plano de assinatura
+                  </p>
+                </div>
+
+                {/* Preview do conteúdo bloqueado */}
+                <div className="relative mb-8">
+                  <div className="prose max-w-none text-gray-700 blur-sm select-none">
+                    <p>{chapter.content.substring(0, 300)}...</p>
+                  </div>
+                  <div className="absolute inset-0 bg-gradient-to-b from-transparent to-white"></div>
+                </div>
+
+                {/* CTA */}
+                <div className="bg-gradient-to-r from-pink-50 to-purple-50 rounded-2xl p-8 text-center">
+                  <Crown className="w-16 h-16 text-pink-500 mx-auto mb-4" />
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                    Desbloqueie Todos os Capítulos
+                  </h3>
+                  <p className="text-gray-600 mb-6">
+                    Acesso ilimitado a partir de R$ 10,97/mês
+                  </p>
+                  <button
+                    onClick={() => setShowSubscriptionModal(true)}
+                    className="px-8 py-4 bg-pink-500 text-white rounded-full font-bold hover:bg-pink-600 hover:shadow-lg transition-all duration-300"
+                  >
+                    Ver Planos de Assinatura
+                  </button>
+                </div>
+
+                {/* Benefícios */}
+                <div className="mt-8 grid md:grid-cols-3 gap-6">
+                  <div className="text-center">
+                    <div className="text-4xl mb-2">📚</div>
+                    <h4 className="font-bold text-gray-900 mb-1">Acesso Total</h4>
+                    <p className="text-sm text-gray-600">
+                      Todos os livros e capítulos
+                    </p>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-4xl mb-2">⚡</div>
+                    <h4 className="font-bold text-gray-900 mb-1">Sem Limites</h4>
+                    <p className="text-sm text-gray-600">
+                      Leia quanto quiser
+                    </p>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-4xl mb-2">💝</div>
+                    <h4 className="font-bold text-gray-900 mb-1">Cancele Quando Quiser</h4>
+                    <p className="text-sm text-gray-600">
+                      Sem compromisso
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Bottom Navigation */}
-      <div className={`fixed bottom-0 left-0 right-0 ${isDarkMode ? "bg-gray-800" : "bg-white"} border-t ${isDarkMode ? "border-gray-700" : "border-pink-100"} z-40`}>
-        <div className="max-w-4xl mx-auto px-4 py-4">
+        <Footer />
+
+        {/* Subscription Modal */}
+        <SubscriptionModal
+          isOpen={showSubscriptionModal}
+          onClose={() => setShowSubscriptionModal(false)}
+          onSelectPlan={handleSelectPlan}
+          currentChapter={chapterNumber}
+        />
+      </div>
+    );
+  }
+
+  // Conteúdo desbloqueado
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-white to-pink-50">
+      <Header />
+
+      <div className="pt-24 pb-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-4xl mx-auto">
+          {/* Breadcrumb */}
+          <div className="mb-6">
+            <Link
+              href={`/livro/${params.id}`}
+              className="text-pink-600 hover:text-pink-700 font-medium flex items-center space-x-2"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span>Voltar para o livro</span>
+            </Link>
+          </div>
+
+          {/* Chapter Content */}
+          <div className="bg-white rounded-3xl shadow-xl overflow-hidden mb-8">
+            <div className="bg-gradient-to-r from-pink-500 to-purple-600 p-8 text-white">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h1 className="text-3xl font-bold mb-2">{chapter.title}</h1>
+                  <p className="text-white/90">{bookData.title}</p>
+                  <p className="text-white/80 text-sm">por {bookData.author}</p>
+                </div>
+                <BookOpen className="w-12 h-12 text-white/80" />
+              </div>
+              <div className="flex items-center space-x-6 text-sm text-white/80">
+                <span>{chapter.date}</span>
+                <span>{chapter.views.toLocaleString('pt-BR')} visualizações</span>
+              </div>
+            </div>
+
+            <div className="p-8 md:p-12">
+              <div className="prose prose-lg max-w-none">
+                <div className="whitespace-pre-line text-gray-800 leading-relaxed">
+                  {chapter.content}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Navigation */}
           <div className="flex items-center justify-between">
             {chapterNumber > 1 ? (
               <Link
                 href={`/livro/${params.id}/capitulo/${chapterNumber - 1}`}
-                className={`flex items-center space-x-2 px-4 py-2 ${isDarkMode ? "bg-gray-700 text-white hover:bg-gray-600" : "bg-pink-50 text-pink-600 hover:bg-pink-100"} rounded-full font-medium transition-colors`}
+                className="flex items-center space-x-2 px-6 py-3 bg-white text-pink-600 rounded-full font-bold hover:shadow-lg transition-all duration-300"
               >
-                <ChevronLeft className="w-4 h-4" />
-                <span className="hidden sm:inline">Anterior</span>
+                <ChevronLeft className="w-5 h-5" />
+                <span>Capítulo Anterior</span>
               </Link>
             ) : (
               <div></div>
             )}
 
-            <Link
-              href={`/livro/${params.id}`}
-              className={`flex items-center space-x-2 px-4 py-2 ${isDarkMode ? "bg-gray-700 text-white hover:bg-gray-600" : "bg-pink-50 text-pink-600 hover:bg-pink-100"} rounded-full font-medium transition-colors`}
-            >
-              <BookOpen className="w-4 h-4" />
-              <span className="hidden sm:inline">Todos os Capítulos</span>
-            </Link>
-
-            <Link
-              href={`/livro/${params.id}/capitulo/${chapterNumber + 1}`}
-              className={`flex items-center space-x-2 px-4 py-2 ${isDarkMode ? "bg-gray-700 text-white hover:bg-gray-600" : "bg-pink-50 text-pink-600 hover:bg-pink-100"} rounded-full font-medium transition-colors`}
-            >
-              <span className="hidden sm:inline">Próximo</span>
-              <ChevronRight className="w-4 h-4" />
-            </Link>
+            {chapterNumber < bookData.totalChapters && (
+              <Link
+                href={`/livro/${params.id}/capitulo/${chapterNumber + 1}`}
+                className="flex items-center space-x-2 px-6 py-3 bg-pink-500 text-white rounded-full font-bold hover:shadow-lg transition-all duration-300"
+              >
+                <span>Próximo Capítulo</span>
+                <ChevronRight className="w-5 h-5" />
+              </Link>
+            )}
           </div>
         </div>
       </div>
 
-      <div className="pb-20">
-        <Footer />
-      </div>
+      <Footer />
     </div>
   );
 }

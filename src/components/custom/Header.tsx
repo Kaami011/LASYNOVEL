@@ -1,23 +1,73 @@
 "use client";
 
-import { Search, User, Heart, Menu, X } from "lucide-react";
+import { Search, User, Heart, Menu, X, LogOut } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import Image from "next/image";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { useRouter } from "next/navigation";
 
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    // Só verificar usuário se Supabase estiver configurado
+    if (isSupabaseConfigured() && supabase) {
+      checkUser();
+
+      // Listener para mudanças de autenticação
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        setUser(session?.user ?? null);
+      });
+
+      return () => subscription.unsubscribe();
+    } else {
+      setLoading(false);
+    }
+  }, []);
+
+  const checkUser = async () => {
+    if (!supabase) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+    } catch (error) {
+      console.error("Erro ao verificar usuário:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (!supabase) return;
+    
+    await supabase.auth.signOut();
+    setUser(null);
+    router.push("/");
+  };
 
   return (
     <header className="fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-b border-pink-100 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link href="/" className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-pink-400 to-purple-500 rounded-lg flex items-center justify-center">
-              <Heart className="w-5 h-5 text-white fill-white" />
-            </div>
-            <span className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-purple-600 bg-clip-text text-transparent">
-              NovelBR
+          <Link href="/" className="flex items-center space-x-3">
+            <Image 
+              src="https://k6hrqrxuu8obbfwn.public.blob.vercel-storage.com/temp/f3f0ad31-b44e-4814-8baa-93a89d6e6213.png" 
+              alt="Bom Romance" 
+              width={40}
+              height={40}
+              className="w-10 h-10 object-contain"
+            />
+            <span className="text-2xl font-bold text-pink-500">
+              Bom Romance
             </span>
           </Link>
 
@@ -54,12 +104,36 @@ export default function Header() {
             <Link href="/favoritos" className="p-2 hover:bg-pink-50 rounded-full transition-colors">
               <Heart className="w-6 h-6 text-gray-700" />
             </Link>
-            <Link
-              href="/login"
-              className="px-6 py-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-full hover:shadow-lg transition-all duration-300 font-medium"
-            >
-              Entrar
-            </Link>
+            
+            {!loading && (
+              <>
+                {user ? (
+                  <div className="flex items-center space-x-3">
+                    <Link
+                      href="/painel"
+                      className="flex items-center space-x-2 px-4 py-2 hover:bg-pink-50 rounded-full transition-colors"
+                    >
+                      <User className="w-5 h-5 text-gray-700" />
+                      <span className="text-gray-700 font-medium">Perfil</span>
+                    </Link>
+                    <button
+                      onClick={handleLogout}
+                      className="p-2 hover:bg-red-50 rounded-full transition-colors"
+                      title="Sair"
+                    >
+                      <LogOut className="w-5 h-5 text-red-600" />
+                    </button>
+                  </div>
+                ) : (
+                  <Link
+                    href="/login"
+                    className="px-6 py-2 bg-pink-500 text-white rounded-full hover:bg-pink-600 hover:shadow-lg transition-all duration-300 font-medium"
+                  >
+                    Entrar
+                  </Link>
+                )}
+              </>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -103,12 +177,36 @@ export default function Header() {
                 <Heart className="w-5 h-5 mr-2" />
                 Favoritos
               </Link>
-              <Link
-                href="/login"
-                className="px-6 py-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-full hover:shadow-lg transition-all duration-300 font-medium text-center"
-              >
-                Entrar
-              </Link>
+              
+              {!loading && (
+                <>
+                  {user ? (
+                    <>
+                      <Link
+                        href="/painel"
+                        className="text-gray-700 hover:text-pink-500 transition-colors font-medium py-2 flex items-center"
+                      >
+                        <User className="w-5 h-5 mr-2" />
+                        Meu Perfil
+                      </Link>
+                      <button
+                        onClick={handleLogout}
+                        className="text-red-600 hover:text-red-700 transition-colors font-medium py-2 flex items-center text-left"
+                      >
+                        <LogOut className="w-5 h-5 mr-2" />
+                        Sair
+                      </button>
+                    </>
+                  ) : (
+                    <Link
+                      href="/login"
+                      className="px-6 py-2 bg-pink-500 text-white rounded-full hover:bg-pink-600 hover:shadow-lg transition-all duration-300 font-medium text-center"
+                    >
+                      Entrar
+                    </Link>
+                  )}
+                </>
+              )}
             </div>
           </div>
         )}

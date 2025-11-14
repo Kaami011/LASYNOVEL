@@ -37,7 +37,7 @@ export default function BookCard({
               <div className="text-sm font-medium">{title}</div>
             </div>
           </div>
-          <div className="absolute top-2 left-2 px-2 py-1 bg-gradient-to-r from-pink-500 to-purple-600 text-white text-xs font-medium rounded-full">
+          <div className="absolute top-2 left-2 px-2 py-1 bg-pink-500 text-white text-xs font-medium rounded-full">
             {genre}
           </div>
         </div>
@@ -78,7 +78,7 @@ export default function BookCard({
 
         <Link
           href={`/livro/${id}`}
-          className="block w-full py-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white text-center rounded-full font-medium hover:shadow-lg transition-all duration-300"
+          className="block w-full py-2 bg-pink-500 text-white text-center rounded-full font-medium hover:bg-pink-600 hover:shadow-lg transition-all duration-300"
         >
           Ler Agora
         </Link>

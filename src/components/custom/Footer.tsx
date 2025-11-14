@@ -2,6 +2,7 @@
 
 import { Heart, Facebook, Instagram, Twitter } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 
 export default function Footer() {
   return (
@@ -11,11 +12,15 @@ export default function Footer() {
           {/* Logo e Descrição */}
           <div className="col-span-1 md:col-span-2">
             <Link href="/" className="flex items-center space-x-2 mb-4">
-              <div className="w-10 h-10 bg-gradient-to-br from-pink-400 to-purple-500 rounded-lg flex items-center justify-center">
-                <Heart className="w-6 h-6 text-white fill-white" />
-              </div>
-              <span className="text-2xl font-bold bg-gradient-to-r from-pink-500 to-purple-600 bg-clip-text text-transparent">
-                NovelBR
+              <Image 
+                src="https://k6hrqrxuu8obbfwn.public.blob.vercel-storage.com/temp/f3f0ad31-b44e-4814-8baa-93a89d6e6213.png" 
+                alt="Bom Romance" 
+                width={40}
+                height={40}
+                className="w-10 h-10 object-contain"
+              />
+              <span className="text-2xl font-bold text-pink-500">
+                Bom Romance
               </span>
             </Link>
             <p className="text-gray-600 mb-4 max-w-md">
@@ -90,7 +95,7 @@ export default function Footer() {
         </div>
 
         <div className="border-t border-pink-200 mt-8 pt-8 text-center text-gray-600">
-          <p>&copy; 2024 NovelBR. Todos os direitos reservados.</p>
+          <p>&copy; 2024 Bom Romance. Todos os direitos reservados.</p>
         </div>
       </div>
     </footer>

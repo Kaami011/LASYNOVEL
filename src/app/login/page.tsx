@@ -4,11 +4,117 @@ import Header from "@/components/custom/Header";
 import Footer from "@/components/custom/Footer";
 import { Mail, Lock, Eye, EyeOff, Heart } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [checkingAuth, setCheckingAuth] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    checkExistingSession();
+  }, []);
+
+  const checkExistingSession = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        // Usuário já está logado, redirecionar
+        router.push("/painel");
+      }
+    } catch (error) {
+      console.error("Erro ao verificar sessão:", error);
+    } finally {
+      setCheckingAuth(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
+    setLoading(true);
+
+    try {
+      if (isLogin) {
+        // Login
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (error) throw error;
+
+        setSuccess("Login realizado com sucesso!");
+        setTimeout(() => {
+          router.push("/painel");
+          router.refresh();
+        }, 1000);
+      } else {
+        // Cadastro
+        if (password !== confirmPassword) {
+          throw new Error("As senhas não coincidem");
+        }
+
+        if (password.length < 6) {
+          throw new Error("A senha deve ter pelo menos 6 caracteres");
+        }
+
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+        });
+
+        if (error) throw error;
+
+        setSuccess("Conta criada com sucesso! Redirecionando...");
+        setTimeout(() => {
+          router.push("/painel");
+          router.refresh();
+        }, 1000);
+      }
+    } catch (err: any) {
+      setError(err.message || "Ocorreu um erro. Tente novamente.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/painel`,
+        },
+      });
+
+      if (error) throw error;
+    } catch (err: any) {
+      setError(err.message || "Erro ao fazer login com Google");
+    }
+  };
+
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-pink-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Verificando sessão...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-pink-100">
@@ -18,10 +124,10 @@ export default function LoginPage() {
         <div className="max-w-md mx-auto">
           {/* Logo Section */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-pink-400 to-purple-500 rounded-2xl mb-4">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-pink-500 rounded-2xl mb-4">
               <Heart className="w-8 h-8 text-white fill-white" />
             </div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-pink-500 to-purple-600 bg-clip-text text-transparent mb-2">
+            <h1 className="text-3xl font-bold text-pink-600 mb-2">
               {isLogin ? "Bem-vindo de volta!" : "Crie sua conta"}
             </h1>
             <p className="text-gray-600">
@@ -33,7 +139,19 @@ export default function LoginPage() {
 
           {/* Form Card */}
           <div className="bg-white rounded-3xl shadow-2xl p-8">
-            <form className="space-y-6">
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm">
+                {error}
+              </div>
+            )}
+
+            {success && (
+              <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-600 rounded-xl text-sm">
+                {success}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-6">
               {/* Email Field */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -44,6 +162,9 @@ export default function LoginPage() {
                   <input
                     type="email"
                     placeholder="seu@email.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
                     className="w-full pl-10 pr-4 py-3 border border-pink-200 rounded-xl focus:border-pink-400 focus:outline-none focus:ring-2 focus:ring-pink-200 transition-all"
                   />
                 </div>
@@ -59,6 +180,9 @@ export default function LoginPage() {
                   <input
                     type={showPassword ? "text" : "password"}
                     placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
                     className="w-full pl-10 pr-12 py-3 border border-pink-200 rounded-xl focus:border-pink-400 focus:outline-none focus:ring-2 focus:ring-pink-200 transition-all"
                   />
                   <button
@@ -86,6 +210,9 @@ export default function LoginPage() {
                     <input
                       type={showPassword ? "text" : "password"}
                       placeholder="••••••••"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      required
                       className="w-full pl-10 pr-12 py-3 border border-pink-200 rounded-xl focus:border-pink-400 focus:outline-none focus:ring-2 focus:ring-pink-200 transition-all"
                     />
                   </div>
@@ -114,9 +241,10 @@ export default function LoginPage() {
               {/* Submit Button */}
               <button
                 type="submit"
-                className="w-full py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-xl font-bold hover:shadow-lg transition-all duration-300"
+                disabled={loading}
+                className="w-full py-3 bg-pink-500 text-white rounded-xl font-bold hover:bg-pink-600 hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isLogin ? "Entrar" : "Criar Conta"}
+                {loading ? "Carregando..." : isLogin ? "Entrar" : "Criar Conta"}
               </button>
             </form>
 
@@ -132,7 +260,10 @@ export default function LoginPage() {
 
             {/* Social Login */}
             <div className="space-y-3">
-              <button className="w-full py-3 border-2 border-pink-200 text-gray-700 rounded-xl font-medium hover:bg-pink-50 transition-colors flex items-center justify-center space-x-2">
+              <button 
+                onClick={handleGoogleLogin}
+                className="w-full py-3 border-2 border-pink-200 text-gray-700 rounded-xl font-medium hover:bg-pink-50 transition-colors flex items-center justify-center space-x-2"
+              >
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
                   <path
                     fill="currentColor"
@@ -153,13 +284,6 @@ export default function LoginPage() {
                 </svg>
                 <span>Continuar com Google</span>
               </button>
-
-              <button className="w-full py-3 border-2 border-pink-200 text-gray-700 rounded-xl font-medium hover:bg-pink-50 transition-colors flex items-center justify-center space-x-2">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-                </svg>
-                <span>Continuar com Facebook</span>
-              </button>
             </div>
 
             {/* Toggle Login/Signup */}
@@ -167,7 +291,11 @@ export default function LoginPage() {
               <p className="text-gray-600">
                 {isLogin ? "Não tem uma conta?" : "Já tem uma conta?"}{" "}
                 <button
-                  onClick={() => setIsLogin(!isLogin)}
+                  onClick={() => {
+                    setIsLogin(!isLogin);
+                    setError("");
+                    setSuccess("");
+                  }}
                   className="text-pink-500 hover:text-pink-600 font-bold"
                 >
                   {isLogin ? "Criar conta" : "Entrar"}

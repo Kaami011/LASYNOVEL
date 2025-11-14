@@ -3,9 +3,11 @@
 import Header from "@/components/custom/Header";
 import Footer from "@/components/custom/Footer";
 import BookCard from "@/components/custom/BookCard";
-import { Heart, Star, Clock, Eye, Share2, BookOpen } from "lucide-react";
+import { Heart, Star, Clock, Eye, Share2, BookOpen, Lock, Crown } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
+import { checkUserSubscription, getFreeChaptersCount } from "@/lib/subscription";
 
 // Mock data
 const bookData = {
@@ -92,8 +94,36 @@ const recommendedBooks = [
 export default function BookPage({ params }: { params: { id: string } }) {
   const [isFavorite, setIsFavorite] = useState(false);
   const [showAllChapters, setShowAllChapters] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [hasSubscription, setHasSubscription] = useState(false);
+
+  const freeChaptersCount = getFreeChaptersCount();
+
+  useEffect(() => {
+    setMounted(true);
+    checkUserAccess();
+  }, []);
+
+  const checkUserAccess = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+
+      if (user) {
+        const subscription = await checkUserSubscription(user.id);
+        setHasSubscription(subscription !== null);
+      }
+    } catch (error) {
+      console.error("Erro ao verificar acesso:", error);
+    }
+  };
 
   const displayedChapters = showAllChapters ? chapters : chapters.slice(0, 10);
+
+  const isChapterLocked = (chapterNumber: number) => {
+    return chapterNumber > freeChaptersCount && !hasSubscription;
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-pink-50">
@@ -101,6 +131,31 @@ export default function BookPage({ params }: { params: { id: string } }) {
 
       <div className="pt-20 pb-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
+          {/* Subscription Banner (if not subscribed) */}
+          {!hasSubscription && (
+            <div className="bg-gradient-to-r from-purple-500 to-pink-500 rounded-2xl p-6 mb-8 text-white shadow-xl">
+              <div className="flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0">
+                <div className="flex items-center space-x-4">
+                  <Crown className="w-12 h-12" />
+                  <div>
+                    <h3 className="text-xl font-bold mb-1">
+                      Primeiros {freeChaptersCount} capítulos grátis!
+                    </h3>
+                    <p className="text-white/90">
+                      Assine para ter acesso ilimitado a partir de R$ 10,97/mês
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href="/painel"
+                  className="px-8 py-3 bg-white text-purple-600 rounded-full font-bold hover:shadow-lg transition-all duration-300"
+                >
+                  Ver Planos
+                </Link>
+              </div>
+            </div>
+          )}
+
           {/* Book Info Section */}
           <div className="bg-white rounded-3xl shadow-xl overflow-hidden mb-12">
             <div className="grid md:grid-cols-3 gap-8 p-6 md:p-10">
@@ -113,7 +168,7 @@ export default function BookPage({ params }: { params: { id: string } }) {
                       <div className="text-lg font-medium px-4">{bookData.title}</div>
                     </div>
                   </div>
-                  <div className="absolute top-4 left-4 px-3 py-1 bg-gradient-to-r from-pink-500 to-purple-600 text-white text-sm font-medium rounded-full">
+                  <div className="absolute top-4 left-4 px-3 py-1 bg-pink-500 text-white text-sm font-medium rounded-full">
                     {bookData.status}
                   </div>
                 </div>
@@ -145,7 +200,9 @@ export default function BookPage({ params }: { params: { id: string } }) {
                   <div className="flex items-center space-x-2">
                     <Star className="w-5 h-5 fill-yellow-400 text-yellow-400" />
                     <span className="font-bold text-gray-900">{bookData.rating}</span>
-                    <span className="text-gray-500">({bookData.totalRatings.toLocaleString()} avaliações)</span>
+                    <span className="text-gray-500">
+                      ({mounted ? bookData.totalRatings.toLocaleString('pt-BR') : bookData.totalRatings} avaliações)
+                    </span>
                   </div>
                   <div className="flex items-center space-x-2">
                     <BookOpen className="w-5 h-5 text-gray-600" />
@@ -185,7 +242,7 @@ export default function BookPage({ params }: { params: { id: string } }) {
                 <div className="flex flex-col sm:flex-row gap-4">
                   <Link
                     href={`/livro/${bookData.id}/capitulo/1`}
-                    className="flex-1 py-4 bg-gradient-to-r from-pink-500 to-purple-600 text-white text-center rounded-full font-bold hover:shadow-lg transition-all duration-300"
+                    className="flex-1 py-4 bg-pink-500 text-white text-center rounded-full font-bold hover:shadow-lg transition-all duration-300"
                   >
                     Começar a Ler
                   </Link>
@@ -203,34 +260,64 @@ export default function BookPage({ params }: { params: { id: string } }) {
             <div className="p-6 md:p-10">
               <h2 className="text-2xl font-bold text-gray-900 mb-6">Lista de Capítulos</h2>
               <div className="space-y-2">
-                {displayedChapters.map((chapter) => (
-                  <Link
-                    key={chapter.number}
-                    href={`/livro/${bookData.id}/capitulo/${chapter.number}`}
-                    className="block p-4 bg-pink-50 hover:bg-pink-100 rounded-xl transition-colors group"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <h3 className="font-bold text-gray-900 group-hover:text-pink-600 transition-colors">
-                          {chapter.title}
-                        </h3>
-                        <div className="flex items-center space-x-4 mt-1 text-sm text-gray-600">
-                          <span>{chapter.date}</span>
-                          <span className="flex items-center space-x-1">
-                            <Eye className="w-4 h-4" />
-                            <span>{chapter.views.toLocaleString()}</span>
-                          </span>
+                {displayedChapters.map((chapter) => {
+                  const locked = isChapterLocked(chapter.number);
+                  
+                  return (
+                    <Link
+                      key={chapter.number}
+                      href={`/livro/${bookData.id}/capitulo/${chapter.number}`}
+                      className={`block p-4 rounded-xl transition-colors group ${
+                        locked 
+                          ? 'bg-gray-50 hover:bg-gray-100' 
+                          : 'bg-pink-50 hover:bg-pink-100'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 flex items-center space-x-3">
+                          {locked ? (
+                            <Lock className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                          ) : (
+                            <BookOpen className="w-5 h-5 text-pink-500 flex-shrink-0" />
+                          )}
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2">
+                              <h3 className={`font-bold transition-colors ${
+                                locked 
+                                  ? 'text-gray-500' 
+                                  : 'text-gray-900 group-hover:text-pink-600'
+                              }`}>
+                                {chapter.title}
+                              </h3>
+                              {locked && (
+                                <span className="px-2 py-0.5 bg-purple-100 text-purple-600 text-xs font-bold rounded-full">
+                                  Premium
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center space-x-4 mt-1 text-sm text-gray-600">
+                              <span>{chapter.date}</span>
+                              <span className="flex items-center space-x-1">
+                                <Eye className="w-4 h-4" />
+                                <span>{mounted ? chapter.views.toLocaleString('pt-BR') : chapter.views}</span>
+                              </span>
+                            </div>
+                          </div>
                         </div>
+                        {locked ? (
+                          <Crown className="w-5 h-5 text-purple-500" />
+                        ) : (
+                          <BookOpen className="w-5 h-5 text-gray-400 group-hover:text-pink-500 transition-colors" />
+                        )}
                       </div>
-                      <BookOpen className="w-5 h-5 text-gray-400 group-hover:text-pink-500 transition-colors" />
-                    </div>
-                  </Link>
-                ))}
+                    </Link>
+                  );
+                })}
               </div>
               {!showAllChapters && chapters.length > 10 && (
                 <button
                   onClick={() => setShowAllChapters(true)}
-                  className="w-full mt-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-full font-bold hover:shadow-lg transition-all duration-300"
+                  className="w-full mt-6 py-3 bg-pink-500 text-white rounded-full font-bold hover:shadow-lg transition-all duration-300"
                 >
                   Ver Todos os {chapters.length} Capítulos
                 </button>
