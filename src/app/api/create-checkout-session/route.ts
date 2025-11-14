@@ -1,168 +1,105 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { SUBSCRIPTION_PLANS } from '@/lib/subscription';
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
 
+/**
+ * Rota responsável por criar a sessão de checkout no Stripe.
+ *
+ * IMPORTANTE:
+ * - Não depende mais da autenticação do Supabase no backend.
+ * - Recebe `userId` e `userEmail` pelo body da requisição (vindos do painel já logado).
+ * - Usa esses dados apenas para vincular a assinatura ao usuário via `metadata`.
+ */
 export async function POST(req: NextRequest) {
   try {
     console.log('🚀 [API] Iniciando criação de checkout session...');
 
-    // Validar variável de ambiente do Stripe
     if (!process.env.STRIPE_SECRET_KEY) {
       console.error('❌ [API] STRIPE_SECRET_KEY não configurada');
       return NextResponse.json(
         { error: 'Configuração do Stripe ausente' },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2024-12-18.acacia',
+      apiVersion: '2024-06-20',
     });
 
-    // 🔥 CRÍTICO: Validar autenticação usando Supabase Auth
-    console.log('🔍 [API] Verificando autenticação do usuário...');
-    
-    const cookieStore = await cookies();
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-    
-    // Usar getUser() - mais confiável para verificar autenticação
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const body = (await req.json().catch(() => null)) as {
+      planType?: 'monthly' | 'quarterly' | 'annual';
+      userId?: string;
+      userEmail?: string;
+    } | null;
 
-    console.log('🔐 [API] Resultado da autenticação:', {
-      userExists: !!user,
-      userId: user?.id,
-      email: user?.email,
-      error: authError?.message
-    });
-
-    if (authError) {
-      console.error('❌ [API] Erro ao obter usuário:', authError);
+    if (!body?.planType) {
       return NextResponse.json(
-        { error: 'Erro ao validar autenticação. Tente fazer login novamente.' },
-        { status: 401 }
+        { error: 'Tipo de plano não informado' },
+        { status: 400 },
       );
     }
 
-    if (!user) {
-      console.error('❌ [API] Nenhum usuário autenticado encontrado');
+    const { planType, userId, userEmail } = body;
+
+    if (!userId) {
+      // Front só deve chamar essa rota se o usuário estiver logado
       return NextResponse.json(
-        { error: 'Você não está autenticado. Por favor, faça login novamente.' },
-        { status: 401 }
+        { error: 'Você não está autenticado. Faça login novamente.' },
+        { status: 401 },
       );
     }
 
-    console.log('✅ [API] Usuário autenticado:', {
-      userId: user.id,
-      email: user.email
-    });
-
-    const userId = user.id;
-    const userEmail = user.email;
-
-    if (!userEmail) {
-      console.error('❌ [API] Email do usuário não encontrado');
-      return NextResponse.json(
-        { error: 'Email do usuário não encontrado' },
-        { status: 400 }
-      );
-    }
-
-    // Pegar planType do body
-    const { planType } = await req.json();
-
-    console.log('📦 [API] Dados do checkout:', { planType, userId, userEmail });
-
-    if (!planType) {
-      return NextResponse.json(
-        { error: 'Tipo de plano não especificado' },
-        { status: 400 }
-      );
-    }
-
-    // Buscar o plano correto com o stripePriceId
-    const plan = SUBSCRIPTION_PLANS.find(p => p.type === planType);
-    
-    if (!plan || !plan.stripePriceId) {
-      console.error('❌ [API] Plano não encontrado ou sem stripePriceId:', planType);
+    const plan = SUBSCRIPTION_PLANS.find((p) => p.type === planType);
+    if (!plan) {
+      console.error('❌ [API] Plano inválido:', planType);
       return NextResponse.json(
         { error: 'Plano inválido' },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    console.log('✅ [API] Plano encontrado:', {
-      type: plan.type,
-      name: plan.name,
-      priceId: plan.stripePriceId
+    // URL base para redirecionar depois do pagamento
+    const baseUrl =
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      process.env.SITE_URL ||
+      'https://bomromance.com.br';
+
+    console.log('📦 Criando checkout no Stripe para:', {
+      userId,
+      userEmail,
+      planType,
+      priceId: plan.stripePriceId,
     });
 
-    // Criar ou recuperar customer
-    let customer;
-    const existingCustomers = await stripe.customers.list({
-      email: userEmail,
-      limit: 1,
-    });
-
-    if (existingCustomers.data.length > 0) {
-      customer = existingCustomers.data[0];
-      console.log('✅ [API] Customer existente encontrado:', customer.id);
-    } else {
-      customer = await stripe.customers.create({
-        email: userEmail,
-        metadata: {
-          userId: userId,
-        },
-      });
-      console.log('✅ [API] Novo customer criado:', customer.id);
-    }
-
-    // Obter URL base da aplicação de forma segura
-    const origin = req.headers.get('origin');
-    const host = req.headers.get('host');
-    const protocol = req.headers.get('x-forwarded-proto') || 'https';
-    
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
-                    origin || 
-                    (host ? `${protocol}://${host}` : 'http://localhost:3000');
-
-    console.log('🌐 [API] Base URL:', baseUrl);
-
-    // Criar sessão de checkout usando o stripePriceId correto
     const checkoutSession = await stripe.checkout.sessions.create({
-      customer: customer.id,
+      mode: 'subscription',
       payment_method_types: ['card'],
+      success_url: `${baseUrl}/painel?checkout=success`,
+      cancel_url: `${baseUrl}/painel?checkout=cancel`,
       line_items: [
         {
           price: plan.stripePriceId,
           quantity: 1,
         },
       ],
-      mode: 'subscription',
-      success_url: `${baseUrl}/painel?success=true`,
-      cancel_url: `${baseUrl}/painel?canceled=true`,
-      client_reference_id: userId,
+      customer_email: userEmail || undefined,
       metadata: {
-        userId: userId,
-        planType: planType,
+        userId,
+        planType,
       },
     });
 
-    console.log('✅ [API] Sessão de checkout criada com sucesso:', {
-      sessionId: checkoutSession.id,
-      url: checkoutSession.url
-    });
+    console.log('✅ [API] Checkout criado com sucesso:', checkoutSession.id);
 
-    return NextResponse.json({ 
-      sessionId: checkoutSession.id, 
-      url: checkoutSession.url 
+    return NextResponse.json({
+      sessionId: checkoutSession.id,
+      url: checkoutSession.url,
     });
   } catch (error: any) {
     console.error('❌ [API] Erro ao criar checkout:', error);
     return NextResponse.json(
       { error: error.message || 'Erro ao processar pagamento' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

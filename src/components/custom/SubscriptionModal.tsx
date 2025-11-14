@@ -42,7 +42,7 @@ export default function SubscriptionModal({
       console.log('📋 Plano selecionado:', planType);
       console.log('👤 Usuário:', { userId, userEmail });
       
-      // Enviar requisição para API - a validação de auth é feita no servidor
+      // Enviar requisição para API com userId e userEmail
       console.log('📡 Enviando requisição para API...');
       
       const response = await fetch("/api/create-checkout-session", {
@@ -50,9 +50,11 @@ export default function SubscriptionModal({
         headers: { 
           "Content-Type": "application/json",
         },
-        credentials: 'include', // 🔥 CRÍTICO: Incluir cookies de sessão
+        credentials: 'include',
         body: JSON.stringify({
           planType,
+          userId,
+          userEmail,
         }),
       });
 
