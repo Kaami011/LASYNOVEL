@@ -22,12 +22,20 @@ export async function POST(req: NextRequest) {
     });
 
     // 🔥 CRÍTICO: Validar autenticação usando Supabase Auth
-    const supabase = createRouteHandlerClient({ cookies });
-    
     console.log('🔍 [API] Verificando autenticação do usuário...');
     
-    // Usar APENAS getUser() - é mais confiável que getSession()
+    const cookieStore = await cookies();
+    const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+    
+    // Usar getUser() - mais confiável para verificar autenticação
     const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    console.log('🔐 [API] Resultado da autenticação:', {
+      userExists: !!user,
+      userId: user?.id,
+      email: user?.email,
+      error: authError?.message
+    });
 
     if (authError) {
       console.error('❌ [API] Erro ao obter usuário:', authError);

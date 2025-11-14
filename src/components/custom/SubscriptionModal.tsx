@@ -3,7 +3,6 @@
 import { X, Check, Sparkles, Loader2 } from "lucide-react";
 import { SUBSCRIPTION_PLANS } from "@/lib/subscription";
 import { useState, useEffect } from "react";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 interface SubscriptionModalProps {
   isOpen: boolean;
@@ -22,7 +21,6 @@ export default function SubscriptionModal({
 }: SubscriptionModalProps) {
   const [loadingPriceId, setLoadingPriceId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [supabase] = useState(() => createClientComponentClient());
 
   // Limpar erro ao abrir modal
   useEffect(() => {
@@ -42,18 +40,9 @@ export default function SubscriptionModal({
     try {
       console.log('🚀 Iniciando processo de checkout...');
       console.log('📋 Plano selecionado:', planType);
+      console.log('👤 Usuário:', { userId, userEmail });
       
-      // Verificar autenticação antes de prosseguir
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      
-      if (authError || !user) {
-        console.error('❌ Usuário não autenticado:', authError);
-        throw new Error('Você precisa estar logado para assinar. Por favor, faça login novamente.');
-      }
-
-      console.log('✅ Usuário autenticado:', user.email);
-      
-      // Enviar requisição para API
+      // Enviar requisição para API - a validação de auth é feita no servidor
       console.log('📡 Enviando requisição para API...');
       
       const response = await fetch("/api/create-checkout-session", {
@@ -223,7 +212,7 @@ export default function SubscriptionModal({
                     {isLoading ? (
                       <>
                         <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                        Verificando...
+                        Processando...
                       </>
                     ) : (
                       'Assinar Agora'
