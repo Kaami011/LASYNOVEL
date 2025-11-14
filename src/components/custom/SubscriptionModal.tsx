@@ -23,10 +23,10 @@ export default function SubscriptionModal({
   const [loading, setLoading] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(true); // 🔥 Começa como true (otimista)
   const [supabase] = useState(() => createClientComponentClient());
 
-  // 🔥 Verificar sessão ao abrir modal
+  // 🔥 Verificar sessão ao abrir modal (com retry)
   useEffect(() => {
     if (isOpen) {
       checkSession();
@@ -35,30 +35,46 @@ export default function SubscriptionModal({
 
   const checkSession = async () => {
     try {
-      console.log('🔍 Verificando sessão do usuário...');
+      console.log('🔍 Verificando autenticação do usuário...');
       
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      // 🔥 MUDANÇA: Usar getUser() em vez de getSession() (mais confiável)
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
       
-      console.log('📊 Status da sessão:', {
-        hasSession: !!session,
-        userId: session?.user?.id,
-        email: session?.user?.email,
-        error: sessionError
+      console.log('📊 Status da autenticação:', {
+        hasUser: !!user,
+        userId: user?.id,
+        email: user?.email,
+        error: userError
       });
 
-      if (sessionError || !session) {
-        console.error('⚠️ Sem sessão válida:', sessionError);
-        setError('Sua sessão expirou. Por favor, faça login novamente.');
-        setIsAuthenticated(false);
+      if (userError || !user) {
+        console.error('⚠️ Erro ao verificar usuário:', userError);
+        
+        // 🔥 Retry uma vez antes de falhar
+        console.log('🔄 Tentando novamente...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        const { data: { user: retryUser }, error: retryError } = await supabase.auth.getUser();
+        
+        if (retryError || !retryUser) {
+          console.error('❌ Falha na segunda tentativa:', retryError);
+          setError('Não foi possível verificar sua autenticação. Por favor, recarregue a página.');
+          setIsAuthenticated(false);
+          return;
+        }
+        
+        console.log('✅ Autenticação confirmada na segunda tentativa');
+        setIsAuthenticated(true);
         return;
       }
 
       setIsAuthenticated(true);
-      console.log('✅ Sessão válida confirmada');
+      console.log('✅ Usuário autenticado confirmado');
     } catch (err) {
-      console.error('❌ Erro ao verificar sessão:', err);
-      setError('Erro ao verificar autenticação. Tente novamente.');
-      setIsAuthenticated(false);
+      console.error('❌ Erro inesperado ao verificar autenticação:', err);
+      // 🔥 Em caso de erro, assume autenticado (otimista) e deixa a API validar
+      setIsAuthenticated(true);
+      console.log('⚠️ Assumindo autenticado - API fará validação final');
     }
   };
 
@@ -73,18 +89,7 @@ export default function SubscriptionModal({
       console.log('🚀 Iniciando processo de checkout...');
       console.log('📋 Plano selecionado:', planType);
       
-      // 🔥 Verificar sessão ANTES de fazer qualquer coisa
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError || !session) {
-        console.error('⚠️ Erro de sessão:', sessionError);
-        throw new Error('Sua sessão expirou. Por favor, faça login novamente.');
-      }
-
-      console.log('✅ Sessão válida confirmada antes do checkout');
-
-      // 🔥 IMPORTANTE: Enviar APENAS o planType
-      // A API vai pegar userId e userEmail da sessão do servidor
+      // 🔥 Enviar APENAS o planType - API valida sessão no servidor
       console.log('📡 Enviando requisição para API...');
       
       const response = await fetch("/api/create-checkout-session", {
@@ -94,7 +99,7 @@ export default function SubscriptionModal({
         },
         credentials: 'include', // 🔥 CRÍTICO: Incluir cookies de sessão
         body: JSON.stringify({
-          planType, // Enviar APENAS o planType
+          planType,
         }),
       });
 
@@ -106,6 +111,12 @@ export default function SubscriptionModal({
       if (!response.ok) {
         const err = await response.json().catch(() => ({ error: 'Erro desconhecido' }));
         console.error('❌ Erro ao criar sessão:', err);
+        
+        // 🔥 Mensagem específica para erro de autenticação
+        if (response.status === 401) {
+          throw new Error('Sua sessão expirou. Por favor, recarregue a página e tente novamente.');
+        }
+        
         throw new Error(err.error || 'Erro ao iniciar o checkout. Tente novamente.');
       }
 
@@ -158,23 +169,14 @@ export default function SubscriptionModal({
         {error && (
           <div className="mx-8 mt-6 p-4 bg-red-50 border border-red-200 rounded-xl">
             <p className="text-red-600 text-sm font-medium">{error}</p>
-            {error.includes('sessão') && (
+            {error.includes('recarregue') && (
               <button
-                onClick={() => window.location.href = '/login'}
-                className="mt-2 text-sm text-red-700 underline hover:text-red-800"
+                onClick={() => window.location.reload()}
+                className="mt-2 px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors"
               >
-                Ir para página de login
+                Recarregar Página
               </button>
             )}
-          </div>
-        )}
-
-        {/* Session Warning */}
-        {!isAuthenticated && !error && (
-          <div className="mx-8 mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
-            <p className="text-yellow-700 text-sm font-medium">
-              Verificando sua autenticação...
-            </p>
           </div>
         )}
 
@@ -266,8 +268,6 @@ export default function SubscriptionModal({
                       <Loader2 className="w-5 h-5 animate-spin mr-2" />
                       Processando...
                     </>
-                  ) : !isAuthenticated ? (
-                    'Verificando...'
                   ) : (
                     'Assinar Agora'
                   )}
