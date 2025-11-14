@@ -2,269 +2,253 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createSubscription, updateSubscriptionStatus } from '@/lib/subscription';
 
-export async function POST(req: NextRequest) {
-  // Validar variáveis de ambiente dentro da função
-  if (!process.env.STRIPE_SECRET_KEY) {
-    console.error('❌ STRIPE_SECRET_KEY não configurada');
-    return NextResponse.json(
-      { error: 'Configuração do servidor incompleta' },
-      { status: 500 }
-    );
+// ============================================
+// CONFIGURAÇÃO DO STRIPE
+// ============================================
+
+function getStripeInstance(): Stripe {
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  
+  if (!secretKey) {
+    throw new Error('STRIPE_SECRET_KEY não configurada');
   }
 
-  if (!process.env.STRIPE_WEBHOOK_SECRET) {
-    console.error('❌ STRIPE_WEBHOOK_SECRET não configurada - webhooks não funcionarão');
-    return NextResponse.json(
-      { error: 'STRIPE_WEBHOOK_SECRET não configurada' },
-      { status: 500 }
-    );
-  }
-
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+  return new Stripe(secretKey, {
     apiVersion: '2024-12-18.acacia',
   });
+}
 
-  const body = await req.text();
-  const signature = req.headers.get('stripe-signature');
-
-  if (!signature) {
-    console.error('❌ Assinatura do webhook ausente');
-    return NextResponse.json(
-      { error: 'Assinatura do webhook ausente' },
-      { status: 400 }
-    );
+function getWebhookSecret(): string {
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  
+  if (!secret) {
+    throw new Error('STRIPE_WEBHOOK_SECRET não configurada');
   }
 
-  let event: Stripe.Event;
+  return secret;
+}
 
-  try {
-    // Verificar assinatura do webhook
-    event = stripe.webhooks.constructEvent(
-      body,
-      signature,
-      process.env.STRIPE_WEBHOOK_SECRET
-    );
-    console.log('✅ Webhook verificado com sucesso:', event.type);
-  } catch (err: any) {
-    console.error('❌ Erro ao verificar webhook:', err.message);
-    return NextResponse.json(
-      { error: `Webhook Error: ${err.message}` },
-      { status: 400 }
-    );
-  }
+// ============================================
+// HANDLERS DE EVENTOS
+// ============================================
 
-  console.log('📨 Webhook recebido:', {
-    type: event.type,
-    id: event.id,
-    created: new Date(event.created * 1000).toISOString()
+async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
+  console.log('🎉 Checkout completado:', {
+    sessionId: session.id,
+    customerId: session.customer,
+    subscriptionId: session.subscription,
   });
 
+  // Extrair dados necessários
+  const userId = session.metadata?.userId || session.client_reference_id;
+  const planType = session.metadata?.planType as 'monthly' | 'quarterly' | 'annual';
+  const subscriptionId = session.subscription as string;
+  const customerId = session.customer as string;
+
+  // Validar dados
+  if (!userId) {
+    throw new Error('userId não encontrado no metadata ou client_reference_id');
+  }
+
+  if (!planType) {
+    throw new Error('planType não encontrado no metadata');
+  }
+
+  if (!subscriptionId) {
+    throw new Error('subscriptionId não encontrado na sessão');
+  }
+
+  if (!customerId) {
+    throw new Error('customerId não encontrado na sessão');
+  }
+
+  console.log('📝 Dados extraídos:', {
+    userId,
+    planType,
+    subscriptionId,
+    customerId,
+  });
+
+  // Criar assinatura no banco
+  const subscription = await createSubscription(
+    userId,
+    planType,
+    subscriptionId,
+    customerId
+  );
+
+  console.log('✅ Assinatura criada no banco:', {
+    id: subscription.id,
+    status: subscription.status,
+    startDate: subscription.start_date,
+    endDate: subscription.end_date,
+  });
+
+  return subscription;
+}
+
+async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
+  console.log('🔄 Assinatura atualizada:', {
+    subscriptionId: subscription.id,
+    status: subscription.status,
+  });
+
+  // Mapear status do Stripe para nosso sistema
+  let status: 'active' | 'canceled' | 'past_due';
+  
+  if (subscription.status === 'active') {
+    status = 'active';
+  } else if (subscription.status === 'past_due') {
+    status = 'past_due';
+  } else {
+    status = 'canceled';
+  }
+
+  // Atualizar no banco
+  await updateSubscriptionStatus(subscription.id, status);
+
+  console.log('✅ Status atualizado no banco:', status);
+}
+
+async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
+  console.log('❌ Assinatura cancelada:', {
+    subscriptionId: subscription.id,
+  });
+
+  // Marcar como cancelada no banco
+  await updateSubscriptionStatus(subscription.id, 'canceled');
+
+  console.log('✅ Assinatura marcada como cancelada no banco');
+}
+
+async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
+  console.log('⚠️ Pagamento falhou:', {
+    invoiceId: invoice.id,
+    subscriptionId: invoice.subscription,
+    attemptCount: invoice.attempt_count,
+  });
+
+  if (invoice.subscription) {
+    await updateSubscriptionStatus(invoice.subscription as string, 'past_due');
+    console.log('✅ Assinatura marcada como past_due');
+  }
+}
+
+async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
+  console.log('✅ Pagamento bem-sucedido:', {
+    invoiceId: invoice.id,
+    subscriptionId: invoice.subscription,
+    amountPaid: invoice.amount_paid / 100,
+  });
+
+  if (invoice.subscription) {
+    await updateSubscriptionStatus(invoice.subscription as string, 'active');
+    console.log('✅ Assinatura reativada');
+  }
+}
+
+// ============================================
+// HANDLER PRINCIPAL
+// ============================================
+
+export async function POST(req: NextRequest) {
   try {
-    switch (event.type) {
-      case 'checkout.session.completed': {
-        const session = event.data.object as Stripe.Checkout.Session;
-        console.log('🎉 Checkout completado:', {
-          sessionId: session.id,
-          customerId: session.customer,
-          subscriptionId: session.subscription,
-          metadata: session.metadata
-        });
+    // 1. Validar configuração
+    const stripe = getStripeInstance();
+    const webhookSecret = getWebhookSecret();
 
-        // Extrair dados do metadata
-        const userId = session.metadata?.userId;
-        const planType = session.metadata?.planType as 'monthly' | 'quarterly' | 'annual';
+    // 2. Obter body e signature
+    const body = await req.text();
+    const signature = req.headers.get('stripe-signature');
 
-        if (!userId) {
-          console.error('❌ userId ausente no metadata:', session.metadata);
-          return NextResponse.json(
-            { error: 'userId ausente no metadata' },
-            { status: 400 }
-          );
-        }
-
-        if (!planType) {
-          console.error('❌ planType ausente no metadata:', session.metadata);
-          return NextResponse.json(
-            { error: 'planType ausente no metadata' },
-            { status: 400 }
-          );
-        }
-
-        // Buscar subscription do Stripe
-        const subscriptionId = session.subscription as string;
-        const customerId = session.customer as string;
-
-        if (!subscriptionId) {
-          console.error('❌ subscriptionId ausente na sessão');
-          return NextResponse.json(
-            { error: 'subscriptionId ausente' },
-            { status: 400 }
-          );
-        }
-
-        if (!customerId) {
-          console.error('❌ customerId ausente na sessão');
-          return NextResponse.json(
-            { error: 'customerId ausente' },
-            { status: 400 }
-          );
-        }
-
-        console.log('📝 Criando assinatura no banco:', {
-          userId,
-          planType,
-          subscriptionId,
-          customerId
-        });
-
-        // Criar assinatura no banco de dados
-        try {
-          const subscription = await createSubscription(
-            userId,
-            planType,
-            subscriptionId,
-            customerId
-          );
-          
-          console.log('✅ Assinatura criada com sucesso no banco:', {
-            id: subscription.id,
-            userId: subscription.user_id,
-            status: subscription.status,
-            planType: subscription.plan_type,
-            startDate: subscription.start_date,
-            endDate: subscription.end_date
-          });
-        } catch (dbError: any) {
-          console.error('❌ Erro ao criar assinatura no banco:', {
-            error: dbError.message,
-            code: dbError.code,
-            details: dbError.details
-          });
-          throw dbError;
-        }
-
-        break;
-      }
-
-      case 'customer.subscription.updated': {
-        const subscription = event.data.object as Stripe.Subscription;
-        console.log('🔄 Assinatura atualizada:', {
-          subscriptionId: subscription.id,
-          status: subscription.status,
-          currentPeriodEnd: new Date(subscription.current_period_end * 1000).toISOString()
-        });
-
-        const status = subscription.status === 'active' ? 'active' : 
-                      subscription.status === 'past_due' ? 'past_due' : 'canceled';
-
-        try {
-          await updateSubscriptionStatus(subscription.id, status);
-          console.log('✅ Status atualizado no banco:', {
-            subscriptionId: subscription.id,
-            newStatus: status
-          });
-        } catch (dbError: any) {
-          console.error('❌ Erro ao atualizar status no banco:', {
-            error: dbError.message,
-            subscriptionId: subscription.id
-          });
-          throw dbError;
-        }
-
-        break;
-      }
-
-      case 'customer.subscription.deleted': {
-        const subscription = event.data.object as Stripe.Subscription;
-        console.log('❌ Assinatura cancelada:', {
-          subscriptionId: subscription.id,
-          canceledAt: subscription.canceled_at ? new Date(subscription.canceled_at * 1000).toISOString() : null
-        });
-
-        try {
-          await updateSubscriptionStatus(subscription.id, 'canceled');
-          console.log('✅ Assinatura marcada como cancelada no banco');
-        } catch (dbError: any) {
-          console.error('❌ Erro ao cancelar assinatura no banco:', {
-            error: dbError.message,
-            subscriptionId: subscription.id
-          });
-          throw dbError;
-        }
-
-        break;
-      }
-
-      case 'invoice.payment_failed': {
-        const invoice = event.data.object as Stripe.Invoice;
-        console.log('⚠️ Pagamento falhou:', {
-          invoiceId: invoice.id,
-          subscriptionId: invoice.subscription,
-          attemptCount: invoice.attempt_count
-        });
-
-        if (invoice.subscription) {
-          try {
-            await updateSubscriptionStatus(invoice.subscription as string, 'past_due');
-            console.log('✅ Assinatura marcada como past_due');
-          } catch (dbError: any) {
-            console.error('❌ Erro ao marcar como past_due:', {
-              error: dbError.message,
-              subscriptionId: invoice.subscription
-            });
-            throw dbError;
-          }
-        }
-
-        break;
-      }
-
-      case 'invoice.payment_succeeded': {
-        const invoice = event.data.object as Stripe.Invoice;
-        console.log('✅ Pagamento bem-sucedido:', {
-          invoiceId: invoice.id,
-          subscriptionId: invoice.subscription,
-          amountPaid: invoice.amount_paid / 100
-        });
-
-        if (invoice.subscription) {
-          try {
-            await updateSubscriptionStatus(invoice.subscription as string, 'active');
-            console.log('✅ Assinatura reativada');
-          } catch (dbError: any) {
-            console.error('❌ Erro ao reativar assinatura:', {
-              error: dbError.message,
-              subscriptionId: invoice.subscription
-            });
-            throw dbError;
-          }
-        }
-
-        break;
-      }
-
-      default:
-        console.log(`ℹ️ Evento não tratado: ${event.type}`);
+    if (!signature) {
+      console.error('❌ Assinatura do webhook ausente');
+      return NextResponse.json(
+        { error: 'Assinatura do webhook ausente' },
+        { status: 400 }
+      );
     }
 
-    return NextResponse.json({ 
-      received: true,
-      eventType: event.type,
-      eventId: event.id
+    // 3. Verificar assinatura do webhook
+    let event: Stripe.Event;
+
+    try {
+      event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+      console.log('✅ Webhook verificado:', event.type);
+    } catch (err: any) {
+      console.error('❌ Erro ao verificar webhook:', err.message);
+      return NextResponse.json(
+        { error: `Webhook Error: ${err.message}` },
+        { status: 400 }
+      );
+    }
+
+    console.log('📨 Evento recebido:', {
+      type: event.type,
+      id: event.id,
+      created: new Date(event.created * 1000).toISOString(),
     });
-  } catch (error: any) {
-    console.error('❌ Erro ao processar webhook:', {
-      error: error.message,
-      stack: error.stack,
-      eventType: event.type,
-      eventId: event.id
-    });
-    
-    return NextResponse.json(
-      { 
-        error: error.message || 'Erro ao processar webhook',
+
+    // 4. Processar evento
+    try {
+      switch (event.type) {
+        case 'checkout.session.completed':
+          await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
+          break;
+
+        case 'customer.subscription.updated':
+          await handleSubscriptionUpdated(event.data.object as Stripe.Subscription);
+          break;
+
+        case 'customer.subscription.deleted':
+          await handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
+          break;
+
+        case 'invoice.payment_failed':
+          await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
+          break;
+
+        case 'invoice.payment_succeeded':
+          await handleInvoicePaymentSucceeded(event.data.object as Stripe.Invoice);
+          break;
+
+        default:
+          console.log(`ℹ️ Evento não tratado: ${event.type}`);
+      }
+
+      // 5. Retornar sucesso
+      return NextResponse.json({
+        received: true,
         eventType: event.type,
-        eventId: event.id
+        eventId: event.id,
+      });
+
+    } catch (processingError: any) {
+      console.error('❌ Erro ao processar evento:', {
+        error: processingError.message,
+        eventType: event.type,
+        eventId: event.id,
+      });
+
+      return NextResponse.json(
+        {
+          error: processingError.message || 'Erro ao processar evento',
+          eventType: event.type,
+          eventId: event.id,
+        },
+        { status: 500 }
+      );
+    }
+
+  } catch (error: any) {
+    console.error('❌ Erro geral no webhook:', {
+      message: error.message,
+      stack: error.stack,
+    });
+
+    return NextResponse.json(
+      {
+        error: error.message || 'Erro no webhook',
       },
       { status: 500 }
     );
