@@ -2,20 +2,24 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createSubscription, updateSubscriptionStatus } from '@/lib/subscription';
 
-// Validar variáveis de ambiente
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('STRIPE_SECRET_KEY não configurada');
-}
-
-if (!process.env.STRIPE_WEBHOOK_SECRET) {
-  console.warn('⚠️ STRIPE_WEBHOOK_SECRET não configurada - webhooks não funcionarão em produção');
-}
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: '2024-12-18.acacia',
-});
-
 export async function POST(req: NextRequest) {
+  // Validar variáveis de ambiente dentro da função
+  if (!process.env.STRIPE_SECRET_KEY) {
+    console.error('❌ STRIPE_SECRET_KEY não configurada');
+    return NextResponse.json(
+      { error: 'Configuração do servidor incompleta' },
+      { status: 500 }
+    );
+  }
+
+  if (!process.env.STRIPE_WEBHOOK_SECRET) {
+    console.warn('⚠️ STRIPE_WEBHOOK_SECRET não configurada - webhooks não funcionarão em produção');
+  }
+
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+    apiVersion: '2024-12-18.acacia',
+  });
+
   const body = await req.text();
   const signature = req.headers.get('stripe-signature');
 
