@@ -30,8 +30,8 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     pricePerMonth: 14.97,
     duration: 30,
     featured: true,
-    stripeProductId: 'prod_TQ52fJTYkMwdBK',
-    stripePriceId: 'price_1STEs11OX1wPZ0uVVcOiqdJK',
+    stripeProductId: 'prod_TQ52IR5rTLr29e',
+    stripePriceId: 'price_1STEsP1OX1wPZ0uV5QX6oT6Z', // Usando o mesmo ID válido temporariamente
   },
   {
     type: 'annual',
@@ -40,7 +40,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     pricePerMonth: 10.97,
     duration: 365,
     savings: 'Economize 27%',
-    stripeProductId: 'prod_TQ52fJTYkMwdBK',
+    stripeProductId: 'prod_TQ52IR5rTLr29e',
     stripePriceId: 'price_1STEsv1OX1wPZ0uVB79Q3UPr',
   },
 ];
