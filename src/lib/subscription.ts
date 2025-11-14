@@ -21,7 +21,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     duration: 90,
     savings: 'Economize 13%',
     stripeProductId: 'prod_TQ07foeZr27Ucx',
-    stripePriceId: 'price_1STA7R1XgPN2MQzNgzUWKIOC', // ID correto do Stripe
+    stripePriceId: 'price_1STA7R1XgPN2MQzNgzUWKIOC', // TRIMESTRAL
   },
   {
     type: 'monthly',
@@ -31,7 +31,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     duration: 30,
     featured: true,
     stripeProductId: 'prod_TQ06FRyVsYNYtR',
-    stripePriceId: 'price_1STA6O1XgPN2MQzN8LoR0yOo', // ID correto do Stripe
+    stripePriceId: 'price_1STA6O1XgPN2MQzN8LoR0yOo', // MENSAL
   },
   {
     type: 'annual',
@@ -41,7 +41,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     duration: 365,
     savings: 'Economize 27%',
     stripeProductId: 'prod_TQ08S9XUBLwyex',
-    stripePriceId: 'price_1STA8B1XgPN2MQzNgaWAvtAf', // ID correto do Stripe
+    stripePriceId: 'price_1STA8B1XgPN2MQzNgaWAvtAf', // ANUAL
   },
 ];
 
