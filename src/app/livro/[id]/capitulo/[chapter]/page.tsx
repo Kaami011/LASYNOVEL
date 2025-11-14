@@ -8,7 +8,7 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { hasAccessToChapter, getFreeChaptersCount, createSubscription } from "@/lib/subscription";
+import { hasAccessToChapter, getFreeChaptersCount } from "@/lib/subscription";
 
 // Mock data do capítulo
 const getChapterContent = (chapterNumber: number) => ({
@@ -39,7 +39,19 @@ Ele finalmente se virou, e seus olhos azuis penetrantes encontraram os dela. Por
 
 Emma engoliu em seco. Este seria um dia muito longo...
 
-[O capítulo continua com mais 2000 palavras de desenvolvimento da história, diálogos envolventes e momentos de tensão romântica entre os personagens principais.]`,
+[O capítulo continua com mais 2000 palavras de desenvolvimento da história, diálogos envolventes e momentos de tensão romântica entre os personagens principais.]
+
+A tarde passou rapidamente, com Emma correndo de um lado para o outro, organizando reuniões, preparando relatórios e tentando acompanhar o ritmo frenético de Marcus. Ele era exigente, mas justo. E havia algo nele que a intrigava profundamente.
+
+Quando o relógio marcou 18h, Emma estava exausta. Mas antes que pudesse sair, Marcus a chamou em seu escritório.
+
+"Srta. Thompson, preciso que me acompanhe em um jantar de negócios hoje à noite", disse ele, sem tirar os olhos dos documentos à sua frente.
+
+Emma hesitou. "Eu... não estava preparada para isso."
+
+Marcus finalmente olhou para ela, e havia algo diferente em seus olhos. "Considere isso parte do trabalho. Passo para buscá-la às 20h."
+
+Não era um pedido. Era uma ordem. E Emma sabia que sua vida estava prestes a ficar muito mais complicada...`,
   date: "Há 3 dias",
   views: Math.floor(Math.random() * 50000) + 10000,
 });
@@ -60,7 +72,6 @@ export default function ChapterPage({
   const [hasAccess, setHasAccess] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
-  const [processingPayment, setProcessingPayment] = useState(false);
   const router = useRouter();
 
   const chapterNumber = parseInt(params.chapter);
@@ -82,34 +93,6 @@ export default function ChapterPage({
     } catch (error) {
       console.error("Erro ao verificar acesso:", error);
       setLoading(false);
-    }
-  };
-
-  const handleSelectPlan = async (planType: 'monthly' | 'quarterly' | 'annual') => {
-    if (!user) {
-      router.push('/login');
-      return;
-    }
-
-    setProcessingPayment(true);
-    try {
-      // Simular processamento de pagamento
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Criar assinatura
-      await createSubscription(user.id, planType);
-      setShowSubscriptionModal(false);
-      
-      // Recarregar acesso
-      await checkAccess();
-      
-      // Mostrar mensagem de sucesso
-      alert('Assinatura ativada com sucesso! 🎉 Agora você tem acesso a todos os capítulos.');
-    } catch (error) {
-      console.error('Erro ao processar pagamento:', error);
-      alert('Erro ao processar pagamento. Tente novamente.');
-    } finally {
-      setProcessingPayment(false);
     }
   };
 
@@ -180,12 +163,21 @@ export default function ChapterPage({
                   <p className="text-gray-600 mb-6">
                     Acesso ilimitado a partir de R$ 10,97/mês
                   </p>
-                  <button
-                    onClick={() => setShowSubscriptionModal(true)}
-                    className="px-8 py-4 bg-pink-500 text-white rounded-full font-bold hover:bg-pink-600 hover:shadow-lg transition-all duration-300"
-                  >
-                    Ver Planos de Assinatura
-                  </button>
+                  {user ? (
+                    <button
+                      onClick={() => setShowSubscriptionModal(true)}
+                      className="px-8 py-4 bg-pink-500 text-white rounded-full font-bold hover:bg-pink-600 hover:shadow-lg transition-all duration-300"
+                    >
+                      Ver Planos de Assinatura
+                    </button>
+                  ) : (
+                    <Link
+                      href="/login"
+                      className="inline-block px-8 py-4 bg-pink-500 text-white rounded-full font-bold hover:bg-pink-600 hover:shadow-lg transition-all duration-300"
+                    >
+                      Fazer Login para Assinar
+                    </Link>
+                  )}
                 </div>
 
                 {/* Benefícios */}
@@ -220,12 +212,15 @@ export default function ChapterPage({
         <Footer />
 
         {/* Subscription Modal */}
-        <SubscriptionModal
-          isOpen={showSubscriptionModal}
-          onClose={() => setShowSubscriptionModal(false)}
-          onSelectPlan={handleSelectPlan}
-          currentChapter={chapterNumber}
-        />
+        {user && (
+          <SubscriptionModal
+            isOpen={showSubscriptionModal}
+            onClose={() => setShowSubscriptionModal(false)}
+            userId={user.id}
+            userEmail={user.email || ''}
+            currentChapter={chapterNumber}
+          />
+        )}
       </div>
     );
   }
@@ -267,7 +262,7 @@ export default function ChapterPage({
 
             <div className="p-8 md:p-12">
               <div className="prose prose-lg max-w-none">
-                <div className="whitespace-pre-line text-gray-800 leading-relaxed">
+                <div className="whitespace-pre-line text-gray-800 leading-relaxed text-lg">
                   {chapter.content}
                 </div>
               </div>
