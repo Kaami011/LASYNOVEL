@@ -14,6 +14,16 @@ export interface SubscriptionPlan {
 
 export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   {
+    type: 'monthly',
+    name: 'Mensal',
+    price: 14.97,
+    pricePerMonth: 14.97,
+    duration: 30,
+    featured: true,
+    stripeProductId: 'prod_TQ52IR5rTLr29e',
+    stripePriceId: 'price_1STEs11OX1wPZ0uVVcOiqdJK',
+  },
+  {
     type: 'quarterly',
     name: 'Trimestral',
     price: 38.91,
@@ -22,16 +32,6 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     savings: 'Economize 13%',
     stripeProductId: 'prod_TQ52IR5rTLr29e',
     stripePriceId: 'price_1STEsP1OX1wPZ0uV5QX6oT6Z',
-  },
-  {
-    type: 'monthly',
-    name: 'Mensal',
-    price: 14.97,
-    pricePerMonth: 14.97,
-    duration: 30,
-    featured: true,
-    stripeProductId: 'prod_TQ52IR5rTLr29e',
-    stripePriceId: 'price_1STEsP1OX1wPZ0uV5QX6oT6Z', // Usando o mesmo ID válido temporariamente
   },
   {
     type: 'annual',
