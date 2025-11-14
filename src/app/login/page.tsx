@@ -2,10 +2,10 @@
 
 import Header from "@/components/custom/Header";
 import Footer from "@/components/custom/Footer";
-import { Mail, Lock, Eye, EyeOff, Heart } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, Heart, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase, diagnoseSupabaseConfig, testSupabaseConnection } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
@@ -19,10 +19,38 @@ export default function LoginPage() {
   const [success, setSuccess] = useState("");
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [isRedirecting, setIsRedirecting] = useState(false);
+  const [configError, setConfigError] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
-    checkExistingSession();
+    // Verificar configuração do Supabase
+    try {
+      const diagnosis = diagnoseSupabaseConfig();
+      
+      if (!diagnosis.hasUrl || !diagnosis.hasKey) {
+        setConfigError(
+          "⚠️ Configuração do Supabase incompleta.\n\n" +
+          `URL: ${diagnosis.hasUrl ? '✅' : '❌ Não configurada'}\n` +
+          `Key: ${diagnosis.hasKey ? '✅' : '❌ Não configurada'}\n\n` +
+          "Configure as variáveis de ambiente na Vercel."
+        );
+        setCheckingAuth(false);
+        return;
+      }
+
+      // Testar conexão
+      testSupabaseConnection().then(result => {
+        if (!result.success) {
+          console.error("Erro no teste de conexão:", result);
+        }
+      });
+
+      checkExistingSession();
+    } catch (err: any) {
+      console.error("Erro ao verificar configuração:", err);
+      setConfigError(err.message);
+      setCheckingAuth(false);
+    }
   }, []);
 
   const checkExistingSession = async () => {
@@ -51,16 +79,47 @@ export default function LoginPage() {
     setSuccess("");
     setLoading(true);
 
+    // Log de debug
+    console.log("🔐 Tentando autenticação...");
+    console.log("Email:", email);
+    console.log("Modo:", isLogin ? "Login" : "Cadastro");
+
     try {
       if (isLogin) {
         // Login
+        console.log("📡 Enviando requisição de login...");
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
 
-        if (error) throw error;
+        console.log("📥 Resposta recebida:", { data, error });
 
+        if (error) {
+          console.error("❌ Erro no login:", error);
+          
+          // Tratamento específico de erros
+          if (error.message.includes("Invalid login credentials")) {
+            throw new Error("Email ou senha incorretos. Verifique suas credenciais.");
+          } else if (error.message.includes("Email not confirmed")) {
+            throw new Error("Por favor, confirme seu email antes de fazer login.");
+          } else if (error.message.includes("Failed to fetch") || error.name === "AuthRetryableFetchError") {
+            throw new Error(
+              "❌ Erro de conexão com o Supabase.\n\n" +
+              "Possíveis causas:\n" +
+              "1. Verifique se o domínio está autorizado no Supabase:\n" +
+              "   • Acesse: https://supabase.com/dashboard/project/[seu-projeto]/auth/url-configuration\n" +
+              "   • Adicione: " + window.location.origin + "\n" +
+              "2. Verifique se as variáveis de ambiente estão corretas\n" +
+              "3. Verifique se o projeto Supabase está ativo\n" +
+              "4. Tente limpar o cache do navegador"
+            );
+          } else {
+            throw error;
+          }
+        }
+
+        console.log("✅ Login bem-sucedido!");
         setSuccess("Login realizado com sucesso!");
         setIsRedirecting(true);
         setTimeout(() => {
@@ -76,13 +135,33 @@ export default function LoginPage() {
           throw new Error("A senha deve ter pelo menos 6 caracteres");
         }
 
+        console.log("📡 Enviando requisição de cadastro...");
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
         });
 
-        if (error) throw error;
+        console.log("📥 Resposta recebida:", { data, error });
 
+        if (error) {
+          console.error("❌ Erro no cadastro:", error);
+          
+          // Tratamento específico de erros de cadastro
+          if (error.message.includes("User already registered")) {
+            throw new Error("Este email já está cadastrado. Faça login ou recupere sua senha.");
+          } else if (error.message.includes("Failed to fetch") || error.name === "AuthRetryableFetchError") {
+            throw new Error(
+              "❌ Erro de conexão com o Supabase.\n\n" +
+              "Verifique se o domínio está autorizado no Supabase:\n" +
+              "Acesse: https://supabase.com/dashboard/project/[seu-projeto]/auth/url-configuration\n" +
+              "Adicione: " + window.location.origin
+            );
+          } else {
+            throw error;
+          }
+        }
+
+        console.log("✅ Cadastro bem-sucedido!");
         setSuccess("Conta criada com sucesso! Redirecionando...");
         setIsRedirecting(true);
         setTimeout(() => {
@@ -90,6 +169,7 @@ export default function LoginPage() {
         }, 1000);
       }
     } catch (err: any) {
+      console.error("❌ Erro de autenticação:", err);
       setError(err.message || "Ocorreu um erro. Tente novamente.");
     } finally {
       setLoading(false);
@@ -98,6 +178,7 @@ export default function LoginPage() {
 
   const handleGoogleLogin = async () => {
     try {
+      console.log("🔐 Tentando login com Google...");
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
@@ -105,8 +186,15 @@ export default function LoginPage() {
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("❌ Erro no login com Google:", error);
+        if (error.message?.includes("Failed to fetch")) {
+          throw new Error("Erro de conexão ao tentar login com Google. Verifique sua internet e as configurações do Supabase.");
+        }
+        throw error;
+      }
     } catch (err: any) {
+      console.error("❌ Erro no login com Google:", err);
       setError(err.message || "Erro ao fazer login com Google");
     }
   };
@@ -118,6 +206,64 @@ export default function LoginPage() {
           <div className="w-16 h-16 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-600">Verificando sessão...</p>
         </div>
+      </div>
+    );
+  }
+
+  // Se houver erro de configuração, mostrar tela de erro
+  if (configError) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-pink-100">
+        <Header />
+        <div className="pt-24 pb-12 px-4 sm:px-6 lg:px-8">
+          <div className="max-w-2xl mx-auto">
+            <div className="bg-white rounded-3xl shadow-2xl p-8">
+              <div className="flex items-start space-x-4 mb-6">
+                <div className="flex-shrink-0">
+                  <AlertCircle className="w-12 h-12 text-red-500" />
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                    Erro de Configuração
+                  </h2>
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                    <pre className="text-sm text-red-800 whitespace-pre-wrap font-mono">
+                      {configError}
+                    </pre>
+                  </div>
+                  
+                  <div className="mt-6 space-y-4">
+                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                      <h3 className="font-bold text-blue-900 mb-2">📋 Como corrigir na Vercel:</h3>
+                      <ol className="text-sm text-blue-800 space-y-2 list-decimal list-inside">
+                        <li>Acesse o projeto na Vercel</li>
+                        <li>Vá em Settings → Environment Variables</li>
+                        <li>Adicione as variáveis:
+                          <ul className="ml-6 mt-2 space-y-1 list-disc list-inside">
+                            <li><code className="bg-blue-100 px-2 py-1 rounded">NEXT_PUBLIC_SUPABASE_URL</code></li>
+                            <li><code className="bg-blue-100 px-2 py-1 rounded">NEXT_PUBLIC_SUPABASE_ANON_KEY</code></li>
+                          </ul>
+                        </li>
+                        <li>Faça um novo deploy</li>
+                      </ol>
+                    </div>
+
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                      <h3 className="font-bold text-yellow-900 mb-2">🔑 Onde encontrar as chaves:</h3>
+                      <ol className="text-sm text-yellow-800 space-y-2 list-decimal list-inside">
+                        <li>Acesse: <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" className="underline">supabase.com/dashboard</a></li>
+                        <li>Selecione seu projeto</li>
+                        <li>Vá em Settings → API</li>
+                        <li>Copie a URL e a anon/public key</li>
+                      </ol>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <Footer />
       </div>
     );
   }
@@ -146,13 +292,18 @@ export default function LoginPage() {
           {/* Form Card */}
           <div className="bg-white rounded-3xl shadow-2xl p-8">
             {error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm">
-                {error}
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl">
+                <div className="flex items-start space-x-3">
+                  <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                  <pre className="text-sm text-red-700 whitespace-pre-wrap flex-1">
+                    {error}
+                  </pre>
+                </div>
               </div>
             )}
 
             {success && (
-              <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-600 rounded-xl text-sm">
+              <div className="mb-4 p-4 bg-green-50 border border-green-200 text-green-700 rounded-xl text-sm">
                 {success}
               </div>
             )}
