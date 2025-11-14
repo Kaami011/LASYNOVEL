@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     
     console.log('🔍 Verificando sessão do usuário no servidor...');
     
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    const { data: { session: userSession }, error: sessionError } = await supabase.auth.getSession();
     
     if (sessionError) {
       console.error('❌ Erro ao obter sessão:', sessionError);
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!session) {
+    if (!userSession) {
       console.error('❌ Nenhuma sessão encontrada no servidor');
       return NextResponse.json(
         { error: 'Você não está autenticado. Por favor, faça login novamente.' },
@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
     console.log('🌐 Base URL:', baseUrl);
 
     // Criar sessão de checkout usando o stripePriceId correto
-    const session = await stripe.checkout.sessions.create({
+    const checkoutSession = await stripe.checkout.sessions.create({
       customer: customer.id,
       payment_method_types: ['card'],
       line_items: [
@@ -152,11 +152,11 @@ export async function POST(req: NextRequest) {
     });
 
     console.log('✅ Sessão de checkout criada com sucesso:', {
-      sessionId: session.id,
-      url: session.url
+      sessionId: checkoutSession.id,
+      url: checkoutSession.url
     });
 
-    return NextResponse.json({ sessionId: session.id, url: session.url });
+    return NextResponse.json({ sessionId: checkoutSession.id, url: checkoutSession.url });
   } catch (error: any) {
     console.error('❌ Erro ao criar checkout:', error);
     return NextResponse.json(
