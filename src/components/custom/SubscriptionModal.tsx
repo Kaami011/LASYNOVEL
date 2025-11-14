@@ -20,76 +20,40 @@ export default function SubscriptionModal({
   userEmail,
   currentChapter,
 }: SubscriptionModalProps) {
-  const [loading, setLoading] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const [loadingPriceId, setLoadingPriceId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(true); // 🔥 Começa como true (otimista)
   const [supabase] = useState(() => createClientComponentClient());
 
-  // 🔥 Verificar sessão ao abrir modal (com retry)
+  // Limpar erro ao abrir modal
   useEffect(() => {
     if (isOpen) {
-      checkSession();
+      setError(null);
+      setLoadingPriceId(null);
     }
   }, [isOpen]);
-
-  const checkSession = async () => {
-    try {
-      console.log('🔍 Verificando autenticação do usuário...');
-      
-      // 🔥 MUDANÇA: Usar getUser() em vez de getSession() (mais confiável)
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      
-      console.log('📊 Status da autenticação:', {
-        hasUser: !!user,
-        userId: user?.id,
-        email: user?.email,
-        error: userError
-      });
-
-      if (userError || !user) {
-        console.error('⚠️ Erro ao verificar usuário:', userError);
-        
-        // 🔥 Retry uma vez antes de falhar
-        console.log('🔄 Tentando novamente...');
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        const { data: { user: retryUser }, error: retryError } = await supabase.auth.getUser();
-        
-        if (retryError || !retryUser) {
-          console.error('❌ Falha na segunda tentativa:', retryError);
-          setError('Não foi possível verificar sua autenticação. Por favor, recarregue a página.');
-          setIsAuthenticated(false);
-          return;
-        }
-        
-        console.log('✅ Autenticação confirmada na segunda tentativa');
-        setIsAuthenticated(true);
-        return;
-      }
-
-      setIsAuthenticated(true);
-      console.log('✅ Usuário autenticado confirmado');
-    } catch (err) {
-      console.error('❌ Erro inesperado ao verificar autenticação:', err);
-      // 🔥 Em caso de erro, assume autenticado (otimista) e deixa a API validar
-      setIsAuthenticated(true);
-      console.log('⚠️ Assumindo autenticado - API fará validação final');
-    }
-  };
 
   if (!isOpen) return null;
 
   const handleSelectPlan = async (planType: "monthly" | "quarterly" | "annual") => {
-    setLoading(true);
-    setSelectedPlan(planType);
+    // Limpar estados anteriores
     setError(null);
+    setLoadingPriceId(planType);
 
     try {
       console.log('🚀 Iniciando processo de checkout...');
       console.log('📋 Plano selecionado:', planType);
       
-      // 🔥 Enviar APENAS o planType - API valida sessão no servidor
+      // Verificar autenticação antes de prosseguir
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !user) {
+        console.error('❌ Usuário não autenticado:', authError);
+        throw new Error('Você precisa estar logado para assinar. Por favor, faça login novamente.');
+      }
+
+      console.log('✅ Usuário autenticado:', user.email);
+      
+      // Enviar requisição para API
       console.log('📡 Enviando requisição para API...');
       
       const response = await fetch("/api/create-checkout-session", {
@@ -112,9 +76,9 @@ export default function SubscriptionModal({
         const err = await response.json().catch(() => ({ error: 'Erro desconhecido' }));
         console.error('❌ Erro ao criar sessão:', err);
         
-        // 🔥 Mensagem específica para erro de autenticação
+        // Mensagem específica para erro de autenticação
         if (response.status === 401) {
-          throw new Error('Sua sessão expirou. Por favor, recarregue a página e tente novamente.');
+          throw new Error('Sua sessão expirou. Por favor, recarregue a página e faça login novamente.');
         }
         
         throw new Error(err.error || 'Erro ao iniciar o checkout. Tente novamente.');
@@ -130,10 +94,11 @@ export default function SubscriptionModal({
         throw new Error('URL de checkout não encontrada');
       }
     } catch (err: any) {
-      console.error('❌ Erro inesperado no handleSelectPlan:', err);
+      console.error('❌ Erro no handleSelectPlan:', err);
       setError(err.message || 'Erro inesperado ao iniciar o checkout.');
-      setLoading(false);
-      setSelectedPlan(null);
+    } finally {
+      // 🔥 CRÍTICO: Sempre limpar o loading, mesmo em caso de erro
+      setLoadingPriceId(null);
     }
   };
 
@@ -143,7 +108,7 @@ export default function SubscriptionModal({
         {/* Close Button */}
         <button
           onClick={onClose}
-          disabled={loading}
+          disabled={!!loadingPriceId}
           className="absolute top-4 right-4 p-2 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors z-10 disabled:opacity-50"
         >
           <X className="w-5 h-5 text-gray-600" />
@@ -180,100 +145,93 @@ export default function SubscriptionModal({
           </div>
         )}
 
-        {/* Loading Overlay */}
-        {loading && (
-          <div className="absolute inset-0 bg-white/90 backdrop-blur-sm flex items-center justify-center z-20">
-            <div className="text-center">
-              <Loader2 className="w-12 h-12 text-pink-500 animate-spin mx-auto mb-4" />
-              <p className="text-lg font-bold text-gray-900">Redirecionando para pagamento...</p>
-              <p className="text-sm text-gray-600 mt-2">Aguarde um momento</p>
-            </div>
-          </div>
-        )}
-
         {/* Plans */}
         <div className="p-8">
           <div className="grid md:grid-cols-3 gap-6">
-            {SUBSCRIPTION_PLANS.map((plan) => (
-              <div
-                key={plan.type}
-                className={`relative rounded-2xl border-2 p-6 transition-all duration-300 hover:shadow-xl ${
-                  plan.featured
-                    ? 'border-pink-500 bg-pink-50 transform scale-105'
-                    : 'border-gray-200 bg-white hover:border-pink-300'
-                }`}
-              >
-                {plan.featured && (
-                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                    <span className="px-4 py-1 bg-pink-500 text-white text-sm font-bold rounded-full shadow-lg">
-                      MAIS POPULAR
-                    </span>
-                  </div>
-                )}
-
-                {plan.savings && !plan.featured && (
-                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                    <span className="px-4 py-1 bg-green-500 text-white text-sm font-bold rounded-full shadow-lg">
-                      {plan.savings}
-                    </span>
-                  </div>
-                )}
-
-                <div className="text-center mb-6">
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">{plan.name}</h3>
-                  <div className="mb-2">
-                    <span className="text-4xl font-bold text-gray-900">
-                      R$ {plan.price.toFixed(2).replace('.', ',')}
-                    </span>
-                  </div>
-                  <p className="text-gray-600">
-                    R$ {plan.pricePerMonth.toFixed(2).replace('.', ',')}/mês
-                  </p>
-                </div>
-
-                <ul className="space-y-3 mb-6">
-                  <li className="flex items-start">
-                    <Check className="w-5 h-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
-                    <span className="text-gray-700">Acesso ilimitado a todos os livros</span>
-                  </li>
-                  <li className="flex items-start">
-                    <Check className="w-5 h-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
-                    <span className="text-gray-700">Todos os capítulos desbloqueados</span>
-                  </li>
-                  <li className="flex items-start">
-                    <Check className="w-5 h-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
-                    <span className="text-gray-700">Leitura offline</span>
-                  </li>
-                  <li className="flex items-start">
-                    <Check className="w-5 h-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
-                    <span className="text-gray-700">Sem anúncios</span>
-                  </li>
-                  <li className="flex items-start">
-                    <Check className="w-5 h-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
-                    <span className="text-gray-700">Cancele quando quiser</span>
-                  </li>
-                </ul>
-
-                <button
-                  onClick={() => handleSelectPlan(plan.type)}
-                  disabled={loading || !isAuthenticated}
-                  className={`w-full py-3 rounded-xl font-bold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center ${
+            {SUBSCRIPTION_PLANS.map((plan) => {
+              const isLoading = loadingPriceId === plan.type;
+              
+              return (
+                <div
+                  key={plan.type}
+                  className={`relative rounded-2xl border-2 p-6 transition-all duration-300 hover:shadow-xl ${
                     plan.featured
-                      ? 'bg-pink-500 text-white hover:bg-pink-600 hover:shadow-lg'
-                      : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
+                      ? 'border-pink-500 bg-pink-50 transform scale-105'
+                      : 'border-gray-200 bg-white hover:border-pink-300'
                   }`}
                 >
-                  {loading && selectedPlan === plan.type ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                      Processando...
-                    </>
-                  ) : (
-                    'Assinar Agora'
+                  {plan.featured && (
+                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                      <span className="px-4 py-1 bg-pink-500 text-white text-sm font-bold rounded-full shadow-lg">
+                        MAIS POPULAR
+                      </span>
+                    </div>
                   )}
-                </button>
-              </div>
-            ))}
+
+                  {plan.savings && !plan.featured && (
+                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                      <span className="px-4 py-1 bg-green-500 text-white text-sm font-bold rounded-full shadow-lg">
+                        {plan.savings}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="text-center mb-6">
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">{plan.name}</h3>
+                    <div className="mb-2">
+                      <span className="text-4xl font-bold text-gray-900">
+                        R$ {plan.price.toFixed(2).replace('.', ',')}
+                      </span>
+                    </div>
+                    <p className="text-gray-600">
+                      R$ {plan.pricePerMonth.toFixed(2).replace('.', ',')}/mês
+                    </p>
+                  </div>
+
+                  <ul className="space-y-3 mb-6">
+                    <li className="flex items-start">
+                      <Check className="w-5 h-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
+                      <span className="text-gray-700">Acesso ilimitado a todos os livros</span>
+                    </li>
+                    <li className="flex items-start">
+                      <Check className="w-5 h-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
+                      <span className="text-gray-700">Todos os capítulos desbloqueados</span>
+                    </li>
+                    <li className="flex items-start">
+                      <Check className="w-5 h-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
+                      <span className="text-gray-700">Leitura offline</span>
+                    </li>
+                    <li className="flex items-start">
+                      <Check className="w-5 h-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
+                      <span className="text-gray-700">Sem anúncios</span>
+                    </li>
+                    <li className="flex items-start">
+                      <Check className="w-5 h-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
+                      <span className="text-gray-700">Cancele quando quiser</span>
+                    </li>
+                  </ul>
+
+                  <button
+                    onClick={() => handleSelectPlan(plan.type)}
+                    disabled={!!loadingPriceId}
+                    className={`w-full py-3 rounded-xl font-bold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center ${
+                      plan.featured
+                        ? 'bg-pink-500 text-white hover:bg-pink-600 hover:shadow-lg'
+                        : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
+                    }`}
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                        Verificando...
+                      </>
+                    ) : (
+                      'Assinar Agora'
+                    )}
+                  </button>
+                </div>
+              );
+            })}
           </div>
 
           {/* Benefits */}

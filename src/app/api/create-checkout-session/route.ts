@@ -6,11 +6,11 @@ import { cookies } from 'next/headers';
 
 export async function POST(req: NextRequest) {
   try {
-    console.log('🚀 Iniciando criação de checkout session...');
+    console.log('🚀 [API] Iniciando criação de checkout session...');
 
     // Validar variável de ambiente do Stripe
     if (!process.env.STRIPE_SECRET_KEY) {
-      console.error('❌ STRIPE_SECRET_KEY não configurada');
+      console.error('❌ [API] STRIPE_SECRET_KEY não configurada');
       return NextResponse.json(
         { error: 'Configuração do Stripe ausente' },
         { status: 500 }
@@ -21,60 +21,50 @@ export async function POST(req: NextRequest) {
       apiVersion: '2024-12-18.acacia',
     });
 
-    // 🔥 CRÍTICO: Validar sessão do usuário NO SERVIDOR (fonte única da verdade)
+    // 🔥 CRÍTICO: Validar autenticação usando Supabase Auth
     const supabase = createRouteHandlerClient({ cookies });
     
-    console.log('🔍 Verificando sessão do usuário no servidor...');
+    console.log('🔍 [API] Verificando autenticação do usuário...');
     
-    const { data: { session: userSession }, error: sessionError } = await supabase.auth.getSession();
-    
-    if (sessionError) {
-      console.error('❌ Erro ao obter sessão:', sessionError);
+    // Usar APENAS getUser() - é mais confiável que getSession()
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+    if (authError) {
+      console.error('❌ [API] Erro ao obter usuário:', authError);
       return NextResponse.json(
-        { error: 'Erro ao validar sessão. Tente fazer login novamente.' },
+        { error: 'Erro ao validar autenticação. Tente fazer login novamente.' },
         { status: 401 }
       );
     }
 
-    if (!userSession) {
-      console.error('❌ Nenhuma sessão encontrada no servidor');
+    if (!user) {
+      console.error('❌ [API] Nenhum usuário autenticado encontrado');
       return NextResponse.json(
         { error: 'Você não está autenticado. Por favor, faça login novamente.' },
         { status: 401 }
       );
     }
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      console.error('❌ Usuário não autenticado na API:', authError);
-      return NextResponse.json(
-        { error: 'Usuário não autenticado. Faça login novamente.' },
-        { status: 401 }
-      );
-    }
-
-    console.log('✅ Usuário autenticado na API:', {
+    console.log('✅ [API] Usuário autenticado:', {
       userId: user.id,
       email: user.email
     });
 
-    // 🔥 IMPORTANTE: Usar dados do servidor, NÃO do cliente
     const userId = user.id;
     const userEmail = user.email;
 
     if (!userEmail) {
-      console.error('❌ Email do usuário não encontrado');
+      console.error('❌ [API] Email do usuário não encontrado');
       return NextResponse.json(
         { error: 'Email do usuário não encontrado' },
         { status: 400 }
       );
     }
 
-    // Pegar planType do body (único dado confiável do cliente)
+    // Pegar planType do body
     const { planType } = await req.json();
 
-    console.log('📦 Dados do checkout:', { planType, userId, userEmail });
+    console.log('📦 [API] Dados do checkout:', { planType, userId, userEmail });
 
     if (!planType) {
       return NextResponse.json(
@@ -87,14 +77,14 @@ export async function POST(req: NextRequest) {
     const plan = SUBSCRIPTION_PLANS.find(p => p.type === planType);
     
     if (!plan || !plan.stripePriceId) {
-      console.error('❌ Plano não encontrado ou sem stripePriceId:', planType);
+      console.error('❌ [API] Plano não encontrado ou sem stripePriceId:', planType);
       return NextResponse.json(
         { error: 'Plano inválido' },
         { status: 400 }
       );
     }
 
-    console.log('✅ Plano encontrado:', {
+    console.log('✅ [API] Plano encontrado:', {
       type: plan.type,
       name: plan.name,
       priceId: plan.stripePriceId
@@ -109,7 +99,7 @@ export async function POST(req: NextRequest) {
 
     if (existingCustomers.data.length > 0) {
       customer = existingCustomers.data[0];
-      console.log('✅ Customer existente encontrado:', customer.id);
+      console.log('✅ [API] Customer existente encontrado:', customer.id);
     } else {
       customer = await stripe.customers.create({
         email: userEmail,
@@ -117,7 +107,7 @@ export async function POST(req: NextRequest) {
           userId: userId,
         },
       });
-      console.log('✅ Novo customer criado:', customer.id);
+      console.log('✅ [API] Novo customer criado:', customer.id);
     }
 
     // Obter URL base da aplicação de forma segura
@@ -129,7 +119,7 @@ export async function POST(req: NextRequest) {
                     origin || 
                     (host ? `${protocol}://${host}` : 'http://localhost:3000');
 
-    console.log('🌐 Base URL:', baseUrl);
+    console.log('🌐 [API] Base URL:', baseUrl);
 
     // Criar sessão de checkout usando o stripePriceId correto
     const checkoutSession = await stripe.checkout.sessions.create({
@@ -151,14 +141,17 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    console.log('✅ Sessão de checkout criada com sucesso:', {
+    console.log('✅ [API] Sessão de checkout criada com sucesso:', {
       sessionId: checkoutSession.id,
       url: checkoutSession.url
     });
 
-    return NextResponse.json({ sessionId: checkoutSession.id, url: checkoutSession.url });
+    return NextResponse.json({ 
+      sessionId: checkoutSession.id, 
+      url: checkoutSession.url 
+    });
   } catch (error: any) {
-    console.error('❌ Erro ao criar checkout:', error);
+    console.error('❌ [API] Erro ao criar checkout:', error);
     return NextResponse.json(
       { error: error.message || 'Erro ao processar pagamento' },
       { status: 500 }
