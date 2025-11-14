@@ -2,10 +2,10 @@
 
 import Header from "@/components/custom/Header";
 import Footer from "@/components/custom/Footer";
-import { Mail, Lock, Eye, EyeOff, Heart } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, Heart, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
@@ -18,24 +18,43 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
+    // Verificar se Supabase está configurado
+    if (!isSupabaseConfigured()) {
+      setError("⚠️ Supabase não configurado. Configure as variáveis de ambiente.");
+      setCheckingAuth(false);
+      return;
+    }
+
     checkExistingSession();
   }, []);
 
   const checkExistingSession = async () => {
+    if (isRedirecting) return;
+    
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      if (error) {
+        console.error("Erro ao verificar sessão:", error);
+        throw error;
+      }
       
       if (session) {
-        // Usuário já está logado, redirecionar
-        router.push("/painel");
+        setIsRedirecting(true);
+        router.replace("/painel");
+        return;
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao verificar sessão:", error);
+      // Não mostrar erro aqui, apenas logar
     } finally {
-      setCheckingAuth(false);
+      if (!isRedirecting) {
+        setCheckingAuth(false);
+      }
     }
   };
 
@@ -43,22 +62,34 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     setSuccess("");
+
+    // Verificar configuração do Supabase
+    if (!isSupabaseConfigured()) {
+      setError("⚠️ Supabase não configurado. Configure as variáveis de ambiente.");
+      return;
+    }
+
     setLoading(true);
 
     try {
       if (isLogin) {
         // Login
+        console.log("🔐 Tentando fazer login...");
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
 
-        if (error) throw error;
+        if (error) {
+          console.error("❌ Erro no login:", error);
+          throw error;
+        }
 
+        console.log("✅ Login bem-sucedido:", data);
         setSuccess("Login realizado com sucesso!");
+        setIsRedirecting(true);
         setTimeout(() => {
-          router.push("/painel");
-          router.refresh();
+          router.replace("/painel");
         }, 1000);
       } else {
         // Cadastro
@@ -70,28 +101,65 @@ export default function LoginPage() {
           throw new Error("A senha deve ter pelo menos 6 caracteres");
         }
 
+        console.log("📝 Tentando criar conta...");
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
         });
 
-        if (error) throw error;
+        if (error) {
+          console.error("❌ Erro no cadastro:", error);
+          throw error;
+        }
 
+        console.log("✅ Cadastro bem-sucedido:", data);
         setSuccess("Conta criada com sucesso! Redirecionando...");
+        setIsRedirecting(true);
         setTimeout(() => {
-          router.push("/painel");
-          router.refresh();
+          router.replace("/painel");
         }, 1000);
       }
     } catch (err: any) {
-      setError(err.message || "Ocorreu um erro. Tente novamente.");
+      console.error("❌ Erro capturado:", err);
+      
+      // Mensagens de erro mais amigáveis e específicas
+      let errorMessage = "Ocorreu um erro. Tente novamente.";
+      
+      // Erro de CORS / Failed to fetch
+      if (err.message?.includes("Failed to fetch") || err.message?.includes("NetworkError") || err.message?.includes("fetch")) {
+        errorMessage = "❌ Erro de conexão com o servidor. Isso geralmente acontece quando o domínio não está configurado no Supabase. Clique no botão 'Diagnóstico' abaixo para mais informações.";
+      } 
+      // Credenciais inválidas
+      else if (err.message?.includes("Invalid login credentials")) {
+        errorMessage = "Email ou senha incorretos. Verifique suas credenciais.";
+      } 
+      // Email não confirmado
+      else if (err.message?.includes("Email not confirmed")) {
+        errorMessage = "Por favor, confirme seu email antes de fazer login.";
+      } 
+      // Usuário já registrado
+      else if (err.message?.includes("User already registered")) {
+        errorMessage = "Este email já está cadastrado. Tente fazer login.";
+      } 
+      // Outros erros
+      else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
   const handleGoogleLogin = async () => {
+    if (!isSupabaseConfigured()) {
+      setError("⚠️ Supabase não configurado. Configure as variáveis de ambiente.");
+      return;
+    }
+
     try {
+      console.log("🔐 Tentando login com Google...");
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
@@ -99,9 +167,19 @@ export default function LoginPage() {
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("❌ Erro no login Google:", error);
+        throw error;
+      }
     } catch (err: any) {
-      setError(err.message || "Erro ao fazer login com Google");
+      console.error("❌ Erro capturado:", err);
+      
+      // Mensagem específica para erro de CORS no OAuth
+      if (err.message?.includes("Failed to fetch") || err.message?.includes("NetworkError")) {
+        setError("❌ Erro de conexão. Configure o domínio no Supabase. Veja o diagnóstico abaixo.");
+      } else {
+        setError(err.message || "Erro ao fazer login com Google");
+      }
     }
   };
 
@@ -140,8 +218,21 @@ export default function LoginPage() {
           {/* Form Card */}
           <div className="bg-white rounded-3xl shadow-2xl p-8">
             {error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm">
-                {error}
+              <div className="mb-4 p-4 bg-red-50 border-2 border-red-200 text-red-700 rounded-xl text-sm">
+                <div className="flex items-start space-x-2">
+                  <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p>{error}</p>
+                    {error.includes("Failed to fetch") && (
+                      <Link 
+                        href="/diagnostico-supabase"
+                        className="inline-block mt-3 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                      >
+                        🔍 Ver Diagnóstico Completo
+                      </Link>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -241,7 +332,7 @@ export default function LoginPage() {
               {/* Submit Button */}
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || !isSupabaseConfigured()}
                 className="w-full py-3 bg-pink-500 text-white rounded-xl font-bold hover:bg-pink-600 hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? "Carregando..." : isLogin ? "Entrar" : "Criar Conta"}
@@ -262,7 +353,8 @@ export default function LoginPage() {
             <div className="space-y-3">
               <button 
                 onClick={handleGoogleLogin}
-                className="w-full py-3 border-2 border-pink-200 text-gray-700 rounded-xl font-medium hover:bg-pink-50 transition-colors flex items-center justify-center space-x-2"
+                disabled={!isSupabaseConfigured()}
+                className="w-full py-3 border-2 border-pink-200 text-gray-700 rounded-xl font-medium hover:bg-pink-50 transition-colors flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
                   <path
@@ -301,6 +393,16 @@ export default function LoginPage() {
                   {isLogin ? "Criar conta" : "Entrar"}
                 </button>
               </p>
+            </div>
+
+            {/* Link para Diagnóstico */}
+            <div className="mt-6 pt-6 border-t border-pink-100">
+              <Link
+                href="/diagnostico-supabase"
+                className="block text-center text-sm text-gray-600 hover:text-pink-600 transition-colors"
+              >
+                🔍 Problemas com login? Executar diagnóstico
+              </Link>
             </div>
           </div>
 

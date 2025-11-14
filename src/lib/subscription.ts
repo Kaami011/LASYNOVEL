@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, isSupabaseConfigured } from './supabase';
 
 export interface SubscriptionPlan {
   type: 'monthly' | 'quarterly' | 'annual';
@@ -6,29 +6,32 @@ export interface SubscriptionPlan {
   price: number;
   pricePerMonth: number;
   duration: number; // em dias
-  stripePriceId: string;
   savings?: string;
   featured?: boolean;
+  stripePriceId: string;
+  stripeProductId: string;
 }
 
 export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
-  {
-    type: 'quarterly',
-    name: 'Trimestral',
-    price: 38.91,
-    pricePerMonth: 12.97,
-    duration: 90,
-    stripePriceId: 'price_1STOMK1OX1wPZ0uVf6yZojha',
-    savings: 'Economize 13%',
-  },
   {
     type: 'monthly',
     name: 'Mensal',
     price: 14.97,
     pricePerMonth: 14.97,
     duration: 30,
-    stripePriceId: 'price_1STMZz1OX1wPZ0uVLc3q8qMO',
     featured: true,
+    stripeProductId: 'prod_TQ52IR5rTLr29e',
+    stripePriceId: 'price_1STEs11OX1wPZ0uVVcOiqdJK',
+  },
+  {
+    type: 'quarterly',
+    name: 'Trimestral',
+    price: 38.91,
+    pricePerMonth: 12.97,
+    duration: 90,
+    savings: 'Economize 13%',
+    stripeProductId: 'prod_TQ52IR5rTLr29e',
+    stripePriceId: 'price_1STEsP1OX1wPZ0uV5QX6oT6Z',
   },
   {
     type: 'annual',
@@ -36,16 +39,17 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     price: 131.64,
     pricePerMonth: 10.97,
     duration: 365,
-    stripePriceId: 'price_1STOMV1OX1wPZ0uVp3uKGSsP',
     savings: 'Economize 27%',
+    stripeProductId: 'prod_TQ52IR5rTLr29e',
+    stripePriceId: 'price_1STEsv1OX1wPZ0uVB79Q3UPr',
   },
 ];
 
-export function getPlanByType(planType: string): SubscriptionPlan | undefined {
-  return SUBSCRIPTION_PLANS.find(p => p.type === planType);
-}
-
 export async function checkUserSubscription(userId: string) {
+  if (!isSupabaseConfigured() || !supabase) {
+    return null;
+  }
+
   try {
     const { data, error } = await supabase
       .from('subscriptions')
@@ -75,6 +79,10 @@ export async function createSubscription(
   stripeSubscriptionId: string,
   stripeCustomerId: string
 ) {
+  if (!isSupabaseConfigured() || !supabase) {
+    throw new Error('Supabase não configurado');
+  }
+
   const plan = SUBSCRIPTION_PLANS.find(p => p.type === planType);
   if (!plan) throw new Error('Plano inválido');
 
@@ -98,8 +106,6 @@ export async function createSubscription(
     .single();
 
   if (error) throw error;
-  
-  console.log('✅ Assinatura criada no banco:', data);
   return data;
 }
 
@@ -107,6 +113,10 @@ export async function updateSubscriptionStatus(
   stripeSubscriptionId: string,
   status: 'active' | 'canceled' | 'past_due'
 ) {
+  if (!isSupabaseConfigured() || !supabase) {
+    throw new Error('Supabase não configurado');
+  }
+
   const { data, error } = await supabase
     .from('subscriptions')
     .update({ status })
@@ -114,12 +124,7 @@ export async function updateSubscriptionStatus(
     .select()
     .single();
 
-  if (error) {
-    console.error('❌ Erro ao atualizar status da assinatura:', error);
-    throw error;
-  }
-
-  console.log('✅ Status da assinatura atualizado:', data);
+  if (error) throw error;
   return data;
 }
 

@@ -1,22 +1,75 @@
 "use client";
 
-import { X, Check, Sparkles } from "lucide-react";
+import { X, Check, Sparkles, Loader2 } from "lucide-react";
 import { SUBSCRIPTION_PLANS } from "@/lib/subscription";
+import { useState } from "react";
 
 interface SubscriptionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelectPlan: (planType: 'monthly' | 'quarterly' | 'annual') => void;
+  userId: string;
+  userEmail: string;
   currentChapter?: number;
 }
 
 export default function SubscriptionModal({
   isOpen,
   onClose,
-  onSelectPlan,
+  userId,
+  userEmail,
   currentChapter,
 }: SubscriptionModalProps) {
+  const [loading, setLoading] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
   if (!isOpen) return null;
+
+  const handleSelectPlan = async (planType: 'monthly' | 'quarterly' | 'annual') => {
+    setLoading(true);
+    setSelectedPlan(planType);
+    setError(null);
+
+    try {
+      console.log('Iniciando checkout para plano:', planType);
+      
+      // Criar sessão de checkout no backend
+      const response = await fetch('/api/create-checkout-session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          planType,
+          userId,
+          userEmail,
+        }),
+      });
+
+      console.log('Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Erro ao criar sessão de checkout');
+      }
+
+      const data = await response.json();
+      console.log('Checkout data:', data);
+
+      // Redirecionar diretamente para a URL do Stripe
+      if (data.url) {
+        console.log('Redirecionando para:', data.url);
+        window.location.href = data.url;
+      } else {
+        throw new Error('URL de checkout não encontrada');
+      }
+    } catch (err: any) {
+      console.error('Erro ao processar pagamento:', err);
+      setError(err.message || 'Erro ao processar pagamento. Tente novamente.');
+      setLoading(false);
+      setSelectedPlan(null);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -24,7 +77,8 @@ export default function SubscriptionModal({
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-2 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors z-10"
+          disabled={loading}
+          className="absolute top-4 right-4 p-2 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors z-10 disabled:opacity-50"
         >
           <X className="w-5 h-5 text-gray-600" />
         </button>
@@ -44,6 +98,24 @@ export default function SubscriptionModal({
             Acesso ilimitado a todos os livros e capítulos da plataforma
           </p>
         </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="mx-8 mt-6 p-4 bg-red-50 border border-red-200 rounded-xl">
+            <p className="text-red-600 text-sm font-medium">{error}</p>
+          </div>
+        )}
+
+        {/* Loading Overlay */}
+        {loading && (
+          <div className="absolute inset-0 bg-white/90 backdrop-blur-sm flex items-center justify-center z-20">
+            <div className="text-center">
+              <Loader2 className="w-12 h-12 text-pink-500 animate-spin mx-auto mb-4" />
+              <p className="text-lg font-bold text-gray-900">Redirecionando para pagamento...</p>
+              <p className="text-sm text-gray-600 mt-2">Aguarde um momento</p>
+            </div>
+          </div>
+        )}
 
         {/* Plans */}
         <div className="p-8">
@@ -109,14 +181,22 @@ export default function SubscriptionModal({
                 </ul>
 
                 <button
-                  onClick={() => onSelectPlan(plan.type)}
-                  className={`w-full py-3 rounded-xl font-bold transition-all duration-300 ${
+                  onClick={() => handleSelectPlan(plan.type)}
+                  disabled={loading}
+                  className={`w-full py-3 rounded-xl font-bold transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center ${
                     plan.featured
                       ? 'bg-pink-500 text-white hover:bg-pink-600 hover:shadow-lg'
                       : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
                   }`}
                 >
-                  Assinar Agora
+                  {loading && selectedPlan === plan.type ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                      Processando...
+                    </>
+                  ) : (
+                    'Assinar Agora'
+                  )}
                 </button>
               </div>
             ))}
@@ -151,7 +231,7 @@ export default function SubscriptionModal({
 
           {/* Footer */}
           <p className="text-center text-sm text-gray-500 mt-6">
-            Pagamento seguro • Cancele a qualquer momento • Suporte 24/7
+            Pagamento seguro via Stripe • Cancele a qualquer momento • Suporte 24/7
           </p>
         </div>
       </div>

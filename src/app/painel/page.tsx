@@ -6,9 +6,9 @@ import BookCard from "@/components/custom/BookCard";
 import SubscriptionModal from "@/components/custom/SubscriptionModal";
 import { Heart, BookOpen, Clock, User, Settings, LogOut, Crown, Check } from "lucide-react";
 import Link from "next/link";
-import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { useRouter, useSearchParams } from "next/navigation";
 import { checkUserSubscription, SUBSCRIPTION_PLANS } from "@/lib/subscription";
 
 const favoriteBooks = [
@@ -77,25 +77,44 @@ const readingHistory = [
   },
 ];
 
-export default function UserDashboard() {
+function UserDashboardContent() {
   const [activeTab, setActiveTab] = useState<"reading" | "favorites" | "profile" | "subscription">("reading");
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [subscription, setSubscription] = useState<any>(null);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
-  const [processingPayment, setProcessingPayment] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     checkAuth();
+    
+    // Verificar se voltou do checkout com sucesso
+    const success = searchParams.get('success');
+    if (success === 'true') {
+      // Recarregar assinatura após sucesso
+      setTimeout(() => {
+        checkAuth();
+      }, 2000);
+    }
   }, []);
 
   const checkAuth = async () => {
+    if (isRedirecting) return; // Evitar múltiplas verificações durante redirecionamento
+    
+    if (!supabase) {
+      setIsRedirecting(true);
+      router.replace("/login");
+      return;
+    }
+
     try {
       const { data: { user }, error } = await supabase.auth.getUser();
       
       if (error || !user) {
-        router.push("/login");
+        setIsRedirecting(true);
+        router.replace("/login");
         return;
       }
 
@@ -108,46 +127,18 @@ export default function UserDashboard() {
       setLoading(false);
     } catch (error) {
       console.error("Erro ao verificar autenticação:", error);
-      router.push("/login");
+      if (!isRedirecting) {
+        setIsRedirecting(true);
+        router.replace("/login");
+      }
     }
   };
 
   const handleLogout = async () => {
+    if (!supabase) return;
+    
     await supabase.auth.signOut();
-    router.push("/");
-  };
-
-  const handleSelectPlan = async (planType: 'monthly' | 'quarterly' | 'annual') => {
-    if (!user) return;
-
-    setProcessingPayment(true);
-    try {
-      // Criar sessão de checkout no Stripe
-      const response = await fetch('/api/create-checkout-session', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          planType,
-          userId: user.id,
-          userEmail: user.email,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.url) {
-        // Redirecionar para o checkout do Stripe
-        window.location.href = data.url;
-      } else {
-        throw new Error(data.error || 'Erro ao criar sessão de checkout');
-      }
-    } catch (error) {
-      console.error('Erro ao processar pagamento:', error);
-      alert('Erro ao processar pagamento. Tente novamente.');
-      setProcessingPayment(false);
-    }
+    router.replace("/");
   };
 
   if (loading) {
@@ -461,15 +452,14 @@ export default function UserDashboard() {
                         </div>
 
                         <button
-                          onClick={() => handleSelectPlan(plan.type)}
-                          disabled={processingPayment}
+                          onClick={() => setShowSubscriptionModal(true)}
                           className={`w-full py-3 rounded-xl font-bold transition-all duration-300 ${
                             plan.featured
                               ? 'bg-pink-500 text-white hover:bg-pink-600 hover:shadow-lg'
                               : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
-                          } disabled:opacity-50 disabled:cursor-not-allowed`}
+                          }`}
                         >
-                          {processingPayment ? 'Processando...' : 'Assinar Agora'}
+                          Assinar Agora
                         </button>
                       </div>
                     ))}
@@ -538,11 +528,29 @@ export default function UserDashboard() {
       <Footer />
 
       {/* Subscription Modal */}
-      <SubscriptionModal
-        isOpen={showSubscriptionModal}
-        onClose={() => setShowSubscriptionModal(false)}
-        onSelectPlan={handleSelectPlan}
-      />
+      {user && (
+        <SubscriptionModal
+          isOpen={showSubscriptionModal}
+          onClose={() => setShowSubscriptionModal(false)}
+          userId={user.id}
+          userEmail={user.email || ''}
+        />
+      )}
     </div>
+  );
+}
+
+export default function UserDashboard() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-b from-white to-pink-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando...</p>
+        </div>
+      </div>
+    }>
+      <UserDashboardContent />
+    </Suspense>
   );
 }

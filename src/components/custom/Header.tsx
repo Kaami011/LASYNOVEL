@@ -4,7 +4,7 @@ import { Search, User, Heart, Menu, X, LogOut } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import Image from "next/image";
-import { supabase } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 
 export default function Header() {
@@ -14,17 +14,27 @@ export default function Header() {
   const router = useRouter();
 
   useEffect(() => {
-    checkUser();
+    // Só verificar usuário se Supabase estiver configurado
+    if (isSupabaseConfigured() && supabase) {
+      checkUser();
 
-    // Listener para mudanças de autenticação
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
+      // Listener para mudanças de autenticação
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        setUser(session?.user ?? null);
+      });
 
-    return () => subscription.unsubscribe();
+      return () => subscription.unsubscribe();
+    } else {
+      setLoading(false);
+    }
   }, []);
 
   const checkUser = async () => {
+    if (!supabase) {
+      setLoading(false);
+      return;
+    }
+
     try {
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
@@ -36,6 +46,8 @@ export default function Header() {
   };
 
   const handleLogout = async () => {
+    if (!supabase) return;
+    
     await supabase.auth.signOut();
     setUser(null);
     router.push("/");
