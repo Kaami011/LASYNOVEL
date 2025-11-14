@@ -7,7 +7,7 @@ import SubscriptionModal from "@/components/custom/SubscriptionModal";
 import { Heart, BookOpen, Clock, User, Settings, LogOut, Crown, Check } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect, Suspense } from "react";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { useRouter, useSearchParams } from "next/navigation";
 import { checkUserSubscription, SUBSCRIPTION_PLANS } from "@/lib/subscription";
 
@@ -102,14 +102,6 @@ function UserDashboardContent() {
 
   const checkAuth = async () => {
     if (isRedirecting) return;
-    
-    // Verificar se Supabase está configurado
-    if (!supabase) {
-      console.error("Supabase não está configurado");
-      setIsRedirecting(true);
-      router.replace("/login");
-      return;
-    }
 
     try {
       const { data: { user }, error } = await supabase.auth.getUser();
@@ -137,8 +129,6 @@ function UserDashboardContent() {
   };
 
   const handleLogout = async () => {
-    if (!supabase) return;
-    
     await supabase.auth.signOut();
     router.replace("/");
   };
