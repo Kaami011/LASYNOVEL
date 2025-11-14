@@ -42,8 +42,18 @@ export async function POST(req: NextRequest) {
     console.log('✅ Plano encontrado:', {
       type: plan.type,
       name: plan.name,
-      priceId: plan.stripePriceId
+      priceId: plan.stripePriceId,
+      price: plan.price
     });
+
+    // Validar se o price_id está correto
+    if (!plan.stripePriceId.startsWith('price_')) {
+      console.error('❌ stripePriceId inválido:', plan.stripePriceId);
+      return NextResponse.json(
+        { error: 'ID de preço inválido no sistema' },
+        { status: 500 }
+      );
+    }
 
     // Criar ou recuperar customer
     let customer;
@@ -75,6 +85,7 @@ export async function POST(req: NextRequest) {
                     (host ? `${protocol}://${host}` : 'http://localhost:3000');
 
     console.log('🌐 Base URL:', baseUrl);
+    console.log('💳 Criando sessão com price_id:', plan.stripePriceId);
 
     // Criar sessão de checkout usando o stripePriceId correto
     const session = await stripe.checkout.sessions.create({
@@ -82,7 +93,7 @@ export async function POST(req: NextRequest) {
       payment_method_types: ['card'],
       line_items: [
         {
-          price: plan.stripePriceId, // Usando o ID correto do plano
+          price: plan.stripePriceId, // ✅ Usando o ID correto do plano
           quantity: 1,
         },
       ],
@@ -93,18 +104,34 @@ export async function POST(req: NextRequest) {
         userId: userId,
         planType: planType,
       },
+      client_reference_id: userId, // ✅ Adicionar userId para webhook
     });
 
     console.log('✅ Sessão de checkout criada:', {
       sessionId: session.id,
-      url: session.url
+      url: session.url,
+      priceId: plan.stripePriceId
     });
 
-    return NextResponse.json({ sessionId: session.id, url: session.url });
+    return NextResponse.json({ 
+      sessionId: session.id, 
+      url: session.url,
+      priceId: plan.stripePriceId // Retornar para debug
+    });
   } catch (error: any) {
     console.error('❌ Erro ao criar checkout:', error);
+    console.error('❌ Detalhes do erro:', {
+      message: error.message,
+      type: error.type,
+      code: error.code,
+      statusCode: error.statusCode
+    });
+    
     return NextResponse.json(
-      { error: error.message || 'Erro ao processar pagamento' },
+      { 
+        error: error.message || 'Erro ao processar pagamento',
+        details: error.type || 'unknown_error'
+      },
       { status: 500 }
     );
   }

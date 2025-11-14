@@ -12,6 +12,7 @@ export interface SubscriptionPlan {
   stripeProductId: string;
 }
 
+// ✅ IDs CORRETOS DO STRIPE (LIVE MODE)
 export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   {
     type: 'monthly',
@@ -21,7 +22,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     duration: 30,
     featured: true,
     stripeProductId: 'prod_TQ52IR5rTLr29e',
-    stripePriceId: 'price_1STEs11OX1wPZ0uVVcOiqdJK',
+    stripePriceId: 'price_1STEs11OX1wPZ0uVVcOiqdJK', // ✅ ID CORRETO
   },
   {
     type: 'quarterly',
@@ -31,7 +32,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     duration: 90,
     savings: 'Economize 13%',
     stripeProductId: 'prod_TQ52IR5rTLr29e',
-    stripePriceId: 'price_1STEsP1OX1wPZ0uV5QX6oT6Z',
+    stripePriceId: 'price_1STEsP1OX1wPZ0uV5QX6oT6Z', // ✅ ID CORRETO
   },
   {
     type: 'annual',
@@ -41,7 +42,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     duration: 365,
     savings: 'Economize 27%',
     stripeProductId: 'prod_TQ52IR5rTLr29e',
-    stripePriceId: 'price_1STEsv1OX1wPZ0uVB79Q3UPr',
+    stripePriceId: 'price_1STEsv1OX1wPZ0uVB79Q3UPr', // ✅ ID CORRETO
   },
 ];
 
