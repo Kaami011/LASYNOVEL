@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { SUBSCRIPTION_PLANS } from '@/lib/subscription';
 
 export const config = {
   api: {
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
 
     // 🔥 CRÍTICO: Pegar userId do client_reference_id (prioridade) ou metadata
     const userId = session.client_reference_id || session.metadata?.userId;
-    const planType = session.metadata?.planType;
+    const planType = session.metadata?.planType as 'monthly' | 'quarterly' | 'annual';
     const userEmail = session.metadata?.userEmail || session.customer_email;
     const stripeCustomerId = session.customer as string;
     const stripeSubscriptionId = session.subscription as string;
@@ -77,6 +78,16 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // 🔥 BUSCAR O VALOR DO PLANO
+    const plan = SUBSCRIPTION_PLANS.find(p => p.type === planType);
+    if (!plan) {
+      console.error('❌ ERRO: Plano não encontrado para tipo:', planType);
+      return NextResponse.json({ 
+        received: true, 
+        error: 'Plano não encontrado' 
+      });
+    }
+
     // Calcular datas de início e fim
     const start = new Date();
     const end = new Date();
@@ -91,6 +102,7 @@ export async function POST(req: NextRequest) {
       status: 'active',
       start_date: start.toISOString(),
       end_date: end.toISOString(),
+      amount: plan.price,
       stripe_customer_id: stripeCustomerId,
       stripe_subscription_id: stripeSubscriptionId,
     });
@@ -103,6 +115,7 @@ export async function POST(req: NextRequest) {
         status: 'active',
         start_date: start.toISOString(),
         end_date: end.toISOString(),
+        amount: plan.price,
         stripe_customer_id: stripeCustomerId,
         stripe_subscription_id: stripeSubscriptionId,
       })
