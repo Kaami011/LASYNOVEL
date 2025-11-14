@@ -22,7 +22,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     duration: 30,
     featured: true,
     stripeProductId: 'prod_TQ52IR5rTLr29e',
-    stripePriceId: 'price_1STEs11OX1wPZ0uVVcOiqdJK', // ✅ ID CORRETO
+    stripePriceId: 'price_1STMZz1OX1wPZ0uVLc3q8qMO', // ✅ ID ATUALIZADO
   },
   {
     type: 'quarterly',
