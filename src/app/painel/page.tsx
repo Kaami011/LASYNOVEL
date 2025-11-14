@@ -9,7 +9,7 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
-import { checkUserSubscription, createSubscription, SUBSCRIPTION_PLANS } from "@/lib/subscription";
+import { checkUserSubscription, SUBSCRIPTION_PLANS } from "@/lib/subscription";
 
 const favoriteBooks = [
   {
@@ -122,21 +122,29 @@ export default function UserDashboard() {
 
     setProcessingPayment(true);
     try {
-      // Simular processamento de pagamento
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Criar assinatura
-      const newSubscription = await createSubscription(user.id, planType);
-      setSubscription(newSubscription);
-      setShowSubscriptionModal(false);
-      
-      // Mostrar mensagem de sucesso
-      alert('Assinatura ativada com sucesso! 🎉');
-      setActiveTab('subscription');
+      // Criar sessão de checkout no Stripe
+      const response = await fetch('/api/create-checkout-session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          planType,
+          userId: user.id,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.url) {
+        // Redirecionar para o checkout do Stripe
+        window.location.href = data.url;
+      } else {
+        throw new Error('Erro ao criar sessão de checkout');
+      }
     } catch (error) {
       console.error('Erro ao processar pagamento:', error);
       alert('Erro ao processar pagamento. Tente novamente.');
-    } finally {
       setProcessingPayment(false);
     }
   };

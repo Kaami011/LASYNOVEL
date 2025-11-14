@@ -8,7 +8,7 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { hasAccessToChapter, getFreeChaptersCount, createSubscription } from "@/lib/subscription";
+import { hasAccessToChapter, getFreeChaptersCount } from "@/lib/subscription";
 
 // Mock data do capítulo
 const getChapterContent = (chapterNumber: number) => ({
@@ -93,22 +93,29 @@ export default function ChapterPage({
 
     setProcessingPayment(true);
     try {
-      // Simular processamento de pagamento
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Criar assinatura
-      await createSubscription(user.id, planType);
-      setShowSubscriptionModal(false);
-      
-      // Recarregar acesso
-      await checkAccess();
-      
-      // Mostrar mensagem de sucesso
-      alert('Assinatura ativada com sucesso! 🎉 Agora você tem acesso a todos os capítulos.');
+      // Criar sessão de checkout no Stripe
+      const response = await fetch('/api/create-checkout-session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          planType,
+          userId: user.id,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.url) {
+        // Redirecionar para o checkout do Stripe
+        window.location.href = data.url;
+      } else {
+        throw new Error('Erro ao criar sessão de checkout');
+      }
     } catch (error) {
       console.error('Erro ao processar pagamento:', error);
       alert('Erro ao processar pagamento. Tente novamente.');
-    } finally {
       setProcessingPayment(false);
     }
   };
@@ -182,9 +189,10 @@ export default function ChapterPage({
                   </p>
                   <button
                     onClick={() => setShowSubscriptionModal(true)}
-                    className="px-8 py-4 bg-pink-500 text-white rounded-full font-bold hover:bg-pink-600 hover:shadow-lg transition-all duration-300"
+                    disabled={processingPayment}
+                    className="px-8 py-4 bg-pink-500 text-white rounded-full font-bold hover:bg-pink-600 hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Ver Planos de Assinatura
+                    {processingPayment ? 'Processando...' : 'Ver Planos de Assinatura'}
                   </button>
                 </div>
 
