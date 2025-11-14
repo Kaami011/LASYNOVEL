@@ -18,6 +18,7 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -25,17 +26,23 @@ export default function LoginPage() {
   }, []);
 
   const checkExistingSession = async () => {
+    if (isRedirecting) return; // Evitar múltiplas verificações durante redirecionamento
+    
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
         // Usuário já está logado, redirecionar
-        router.push("/painel");
+        setIsRedirecting(true);
+        router.replace("/painel");
+        return;
       }
     } catch (error) {
       console.error("Erro ao verificar sessão:", error);
     } finally {
-      setCheckingAuth(false);
+      if (!isRedirecting) {
+        setCheckingAuth(false);
+      }
     }
   };
 
@@ -56,9 +63,9 @@ export default function LoginPage() {
         if (error) throw error;
 
         setSuccess("Login realizado com sucesso!");
+        setIsRedirecting(true);
         setTimeout(() => {
-          router.push("/painel");
-          router.refresh();
+          router.replace("/painel");
         }, 1000);
       } else {
         // Cadastro
@@ -78,9 +85,9 @@ export default function LoginPage() {
         if (error) throw error;
 
         setSuccess("Conta criada com sucesso! Redirecionando...");
+        setIsRedirecting(true);
         setTimeout(() => {
-          router.push("/painel");
-          router.refresh();
+          router.replace("/painel");
         }, 1000);
       }
     } catch (err: any) {

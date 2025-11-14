@@ -19,6 +19,7 @@ export default function ChapterPage() {
   const chapter = getChapter(bookId, chapterId);
   
   const [hasSubscription, setHasSubscription] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -34,6 +35,7 @@ export default function ChapterPage() {
       const { data: { user } } = await supabase.auth.getUser();
       
       if (user) {
+        setIsLoggedIn(true);
         const { data: subscription } = await supabase
           .from('subscriptions')
           .select('*')
@@ -42,6 +44,8 @@ export default function ChapterPage() {
           .single();
         
         setHasSubscription(!!subscription);
+      } else {
+        setIsLoggedIn(false);
       }
     } catch (error) {
       console.error('Erro ao verificar assinatura:', error);
@@ -68,7 +72,8 @@ export default function ChapterPage() {
   }
 
   const freeChapters = 3;
-  const isLocked = chapterId > freeChapters && !hasSubscription;
+  const isLocked = chapterId > freeChapters && (!isLoggedIn || !hasSubscription);
+  const needsLogin = chapterId <= freeChapters && !isLoggedIn;
   const hasPrevious = chapterId > 1;
   const hasNext = chapterId < book.chapters;
 
@@ -107,7 +112,47 @@ export default function ChapterPage() {
 
           {/* Conteúdo do Capítulo */}
           <div className="bg-white rounded-3xl shadow-xl p-8 md:p-12 mb-8">
-            {isLocked ? (
+            {needsLogin ? (
+              <div className="relative">
+                {/* Preview com blur */}
+                <div className="prose prose-lg max-w-none mb-8">
+                  <div className="relative">
+                    <div className="filter blur-sm select-none">
+                      {chapter.content.substring(0, 500)}...
+                    </div>
+                    <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/50 to-white"></div>
+                  </div>
+                </div>
+
+                {/* Login necessário */}
+                <div className="text-center py-12">
+                  <div className="inline-flex items-center justify-center w-20 h-20 bg-pink-100 rounded-full mb-6">
+                    <Lock className="w-10 h-10 text-pink-500" />
+                  </div>
+                  <h2 className="text-3xl font-bold text-gray-900 mb-4">
+                    Faça login para ler este capítulo
+                  </h2>
+                  <p className="text-gray-600 mb-8 max-w-md mx-auto">
+                    Crie uma conta gratuita para ler os primeiros {freeChapters} capítulos de {book.title} e
+                    descobrir centenas de outros livros incríveis!
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                    <Link
+                      href="/login"
+                      className="px-8 py-4 bg-pink-500 text-white rounded-full font-bold hover:bg-pink-600 transition-all duration-300 shadow-lg hover:shadow-xl"
+                    >
+                      Fazer Login / Criar Conta
+                    </Link>
+                    <Link
+                      href={`/livro/${book.id}`}
+                      className="px-8 py-4 bg-gray-100 text-gray-700 rounded-full font-bold hover:bg-gray-200 transition-all duration-300"
+                    >
+                      Voltar ao Livro
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            ) : isLocked ? (
               <div className="relative">
                 {/* Preview com blur */}
                 <div className="prose prose-lg max-w-none mb-8">
@@ -157,7 +202,7 @@ export default function ChapterPage() {
           </div>
 
           {/* Navegação entre Capítulos */}
-          {!isLocked && (
+          {!isLocked && !needsLogin && (
             <div className="flex items-center justify-between gap-4">
               {hasPrevious ? (
                 <Link

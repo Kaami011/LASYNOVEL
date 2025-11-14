@@ -83,15 +83,11 @@ function UserDashboardContent() {
   const [user, setUser] = useState<any>(null);
   const [subscription, setSubscription] = useState<any>(null);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    if (!isSupabaseConfigured() || !supabase) {
-      router.push("/login");
-      return;
-    }
-    
     checkAuth();
     
     // Verificar se voltou do checkout com sucesso
@@ -102,11 +98,14 @@ function UserDashboardContent() {
         checkAuth();
       }, 2000);
     }
-  }, [searchParams, router]);
+  }, []);
 
   const checkAuth = async () => {
+    if (isRedirecting) return; // Evitar múltiplas verificações durante redirecionamento
+    
     if (!supabase) {
-      router.push("/login");
+      setIsRedirecting(true);
+      router.replace("/login");
       return;
     }
 
@@ -114,7 +113,8 @@ function UserDashboardContent() {
       const { data: { user }, error } = await supabase.auth.getUser();
       
       if (error || !user) {
-        router.push("/login");
+        setIsRedirecting(true);
+        router.replace("/login");
         return;
       }
 
@@ -127,7 +127,10 @@ function UserDashboardContent() {
       setLoading(false);
     } catch (error) {
       console.error("Erro ao verificar autenticação:", error);
-      router.push("/login");
+      if (!isRedirecting) {
+        setIsRedirecting(true);
+        router.replace("/login");
+      }
     }
   };
 
@@ -135,7 +138,7 @@ function UserDashboardContent() {
     if (!supabase) return;
     
     await supabase.auth.signOut();
-    router.push("/");
+    router.replace("/");
   };
 
   if (loading) {
