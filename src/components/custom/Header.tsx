@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, User, Heart, Menu, X, LogOut, ChevronDown, TrendingUp } from "lucide-react";
+import { Search, User, Heart, Menu, X, LogOut } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import Image from "next/image";
@@ -9,23 +9,9 @@ import { useRouter } from "next/navigation";
 
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [exploreMenuOpen, setExploreMenuOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
-
-  // Categorias disponíveis
-  const categories = [
-    "Romance",
-    "Romance +18",
-    "Romance Paranormal",
-    "Drama",
-    "Fantasia",
-    "Ficção Científica",
-    "Suspense",
-    "Histórico",
-    "Contemporâneo"
-  ];
 
   useEffect(() => {
     // Só verificar usuário se Supabase estiver configurado
@@ -90,47 +76,11 @@ export default function Header() {
             <Link href="/" className="text-gray-700 hover:text-pink-500 transition-colors font-medium">
               Início
             </Link>
-            
-            {/* Explorar com Dropdown */}
-            <div className="relative">
-              <button
-                onMouseEnter={() => setExploreMenuOpen(true)}
-                onMouseLeave={() => setExploreMenuOpen(false)}
-                className="text-gray-700 hover:text-pink-500 transition-colors font-medium flex items-center space-x-1"
-              >
-                <span>Explorar</span>
-                <ChevronDown className="w-4 h-4" />
-              </button>
-              
-              {exploreMenuOpen && (
-                <div
-                  onMouseEnter={() => setExploreMenuOpen(true)}
-                  onMouseLeave={() => setExploreMenuOpen(false)}
-                  className="absolute top-full left-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-pink-100 py-2 z-50"
-                >
-                  <Link
-                    href="/explorar"
-                    className="block px-4 py-2 text-gray-700 hover:bg-pink-50 hover:text-pink-500 transition-colors font-medium"
-                  >
-                    Todos os Livros
-                  </Link>
-                  <div className="border-t border-pink-100 my-2"></div>
-                  {categories.map((category) => (
-                    <Link
-                      key={category}
-                      href={`/explorar?categoria=${encodeURIComponent(category)}`}
-                      className="block px-4 py-2 text-gray-700 hover:bg-pink-50 hover:text-pink-500 transition-colors"
-                    >
-                      {category}
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <Link href="/em-alta" className="text-gray-700 hover:text-pink-500 transition-colors font-medium flex items-center space-x-1">
-              <TrendingUp className="w-4 h-4" />
-              <span>Em Alta</span>
+            <Link href="/explorar" className="text-gray-700 hover:text-pink-500 transition-colors font-medium">
+              Explorar
+            </Link>
+            <Link href="/categorias" className="text-gray-700 hover:text-pink-500 transition-colors font-medium">
+              Categorias
             </Link>
             <Link href="/novos" className="text-gray-700 hover:text-pink-500 transition-colors font-medium">
               Novos
@@ -214,28 +164,11 @@ export default function Header() {
               <Link href="/" className="text-gray-700 hover:text-pink-500 transition-colors font-medium py-2">
                 Início
               </Link>
-              
-              {/* Explorar Mobile */}
-              <div>
-                <Link href="/explorar" className="text-gray-700 hover:text-pink-500 transition-colors font-medium py-2 block">
-                  Explorar
-                </Link>
-                <div className="pl-4 mt-2 space-y-2">
-                  {categories.map((category) => (
-                    <Link
-                      key={category}
-                      href={`/explorar?categoria=${encodeURIComponent(category)}`}
-                      className="block text-sm text-gray-600 hover:text-pink-500 transition-colors py-1"
-                    >
-                      {category}
-                    </Link>
-                  ))}
-                </div>
-              </div>
-
-              <Link href="/em-alta" className="text-gray-700 hover:text-pink-500 transition-colors font-medium py-2 flex items-center space-x-2">
-                <TrendingUp className="w-5 h-5" />
-                <span>Em Alta</span>
+              <Link href="/explorar" className="text-gray-700 hover:text-pink-500 transition-colors font-medium py-2">
+                Explorar
+              </Link>
+              <Link href="/categorias" className="text-gray-700 hover:text-pink-500 transition-colors font-medium py-2">
+                Categorias
               </Link>
               <Link href="/novos" className="text-gray-700 hover:text-pink-500 transition-colors font-medium py-2">
                 Novos

@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
+// Import all available fonts for AI usage
+import "../lib/fonts";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Bom Romance - Leia Romance na Web",
+  title: "NovelBR - Leia Romances Online",
   description: "Plataforma brasileira de leitura online de romances. Milhares de histórias de romance, drama e fantasia.",
 };
 
