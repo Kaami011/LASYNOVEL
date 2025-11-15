@@ -3,142 +3,46 @@
 import Header from "@/components/custom/Header";
 import Footer from "@/components/custom/Footer";
 import BookCard from "@/components/custom/BookCard";
-import { Filter, Grid, List } from "lucide-react";
-import { useState } from "react";
-
-const allBooks = [
-  {
-    id: "1",
-    title: "Amor Proibido: O Segredo do Bilionário",
-    author: "Ana Silva",
-    cover: "",
-    rating: 4.8,
-    chapters: 120,
-    genre: "Romance",
-    views: "2.5M",
-  },
-  {
-    id: "2",
-    title: "Destino Entrelaçado",
-    author: "Beatriz Costa",
-    cover: "",
-    rating: 4.9,
-    chapters: 95,
-    genre: "Romance",
-    views: "1.8M",
-  },
-  {
-    id: "3",
-    title: "Paixão Inesperada",
-    author: "Carlos Mendes",
-    cover: "",
-    rating: 4.7,
-    chapters: 80,
-    genre: "Drama",
-    views: "1.5M",
-  },
-  {
-    id: "4",
-    title: "Corações Divididos",
-    author: "Diana Oliveira",
-    cover: "",
-    rating: 4.6,
-    chapters: 110,
-    genre: "Romance",
-    views: "1.3M",
-  },
-  {
-    id: "5",
-    title: "Amor em Paris",
-    author: "Eduardo Santos",
-    cover: "",
-    rating: 4.8,
-    chapters: 75,
-    genre: "Romance",
-    views: "1.2M",
-  },
-  {
-    id: "6",
-    title: "Segredos do Passado",
-    author: "Fernanda Lima",
-    cover: "",
-    rating: 4.5,
-    chapters: 90,
-    genre: "Mistério",
-    views: "1.1M",
-  },
-  {
-    id: "7",
-    title: "Lua de Mel Falsa",
-    author: "Gabriel Rocha",
-    cover: "",
-    rating: 4.4,
-    chapters: 45,
-    genre: "Romance",
-    views: "850K",
-  },
-  {
-    id: "8",
-    title: "O Príncipe Secreto",
-    author: "Helena Martins",
-    cover: "",
-    rating: 4.7,
-    chapters: 60,
-    genre: "Fantasia",
-    views: "920K",
-  },
-  {
-    id: "9",
-    title: "Casamento por Contrato",
-    author: "Igor Ferreira",
-    cover: "",
-    rating: 4.6,
-    chapters: 55,
-    genre: "Romance",
-    views: "780K",
-  },
-  {
-    id: "10",
-    title: "Amor Além do Tempo",
-    author: "Julia Alves",
-    cover: "",
-    rating: 4.8,
-    chapters: 70,
-    genre: "Fantasia",
-    views: "1M",
-  },
-  {
-    id: "11",
-    title: "A Herdeira Esquecida",
-    author: "Karen Silva",
-    cover: "",
-    rating: 4.9,
-    chapters: 130,
-    genre: "Drama",
-    views: "3.2M",
-  },
-  {
-    id: "12",
-    title: "Vingança Doce",
-    author: "Lucas Pereira",
-    cover: "",
-    rating: 4.7,
-    chapters: 105,
-    genre: "Drama",
-    views: "2.8M",
-  },
-];
-
-const genres = ["Todos", "Romance", "Drama", "Fantasia", "Mistério", "Aventura"];
+import { Filter, ChevronDown } from "lucide-react";
+import { useState, useMemo } from "react";
+import { booksData, getAllGenres } from "@/lib/books-data";
 
 export default function ExplorePage() {
   const [selectedGenre, setSelectedGenre] = useState("Todos");
   const [sortBy, setSortBy] = useState("popular");
+  const [isGenreMenuOpen, setIsGenreMenuOpen] = useState(false);
 
-  const filteredBooks =
-    selectedGenre === "Todos"
-      ? allBooks
-      : allBooks.filter((book) => book.genre === selectedGenre);
+  // Obter todos os gêneros disponíveis
+  const genres = useMemo(() => getAllGenres(), []);
+
+  // Filtrar livros por gênero selecionado
+  const filteredBooks = useMemo(() => {
+    let books = selectedGenre === "Todos" 
+      ? [...booksData] 
+      : booksData.filter((book) => book.genre === selectedGenre);
+
+    // Ordenar livros
+    switch (sortBy) {
+      case "popular":
+        books.sort((a, b) => {
+          const viewsA = parseFloat(a.views.replace(/[KM]/g, "")) * (a.views.includes("M") ? 1000 : a.views.includes("K") ? 1 : 1);
+          const viewsB = parseFloat(b.views.replace(/[KM]/g, "")) * (b.views.includes("M") ? 1000 : b.views.includes("K") ? 1 : 1);
+          return viewsB - viewsA;
+        });
+        break;
+      case "rating":
+        books.sort((a, b) => b.rating - a.rating);
+        break;
+      case "recent":
+        books.reverse();
+        break;
+      case "chapters":
+        books.sort((a, b) => b.chapters - a.chapters);
+        break;
+    }
+
+    return books;
+  }, [selectedGenre, sortBy]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-pink-50">
@@ -154,28 +58,62 @@ export default function ExplorePage() {
 
           {/* Filters */}
           <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-              {/* Genre Filter */}
+            <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between space-y-4 lg:space-y-0 gap-6">
+              {/* Genre Filter - Dropdown Menu */}
               <div className="flex-1">
                 <div className="flex items-center space-x-2 mb-3">
                   <Filter className="w-5 h-5 text-gray-600" />
                   <span className="font-medium text-gray-700">Gênero</span>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {genres.map((genre) => (
-                    <button
-                      key={genre}
-                      onClick={() => setSelectedGenre(genre)}
-                      className={`px-4 py-2 rounded-full font-medium transition-all duration-300 ${
-                        selectedGenre === genre
-                          ? "bg-gradient-to-r from-pink-500 to-purple-600 text-white shadow-lg"
-                          : "bg-pink-50 text-gray-700 hover:bg-pink-100"
-                      }`}
-                    >
-                      {genre}
-                    </button>
-                  ))}
+                
+                {/* Dropdown Button */}
+                <div className="relative">
+                  <button
+                    onClick={() => setIsGenreMenuOpen(!isGenreMenuOpen)}
+                    className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-between gap-3"
+                  >
+                    <span>{selectedGenre}</span>
+                    <ChevronDown className={`w-5 h-5 transition-transform duration-300 ${isGenreMenuOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {isGenreMenuOpen && (
+                    <div className="absolute top-full left-0 mt-2 w-full sm:w-64 bg-white rounded-xl shadow-2xl border border-gray-100 z-50 max-h-96 overflow-y-auto">
+                      {genres.map((genre) => (
+                        <button
+                          key={genre}
+                          onClick={() => {
+                            setSelectedGenre(genre);
+                            setIsGenreMenuOpen(false);
+                          }}
+                          className={`w-full text-left px-4 py-3 hover:bg-pink-50 transition-colors duration-200 first:rounded-t-xl last:rounded-b-xl ${
+                            selectedGenre === genre
+                              ? "bg-pink-100 text-pink-700 font-semibold"
+                              : "text-gray-700"
+                          }`}
+                        >
+                          {genre}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
+
+                {/* Selected Genre Display */}
+                {selectedGenre !== "Todos" && (
+                  <div className="mt-3 flex items-center gap-2">
+                    <span className="text-sm text-gray-600">Filtrando por:</span>
+                    <span className="px-3 py-1 bg-pink-100 text-pink-700 rounded-full text-sm font-medium">
+                      {selectedGenre}
+                    </span>
+                    <button
+                      onClick={() => setSelectedGenre("Todos")}
+                      className="text-sm text-gray-500 hover:text-pink-600 underline"
+                    >
+                      Limpar
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Sort By */}
@@ -184,7 +122,7 @@ export default function ExplorePage() {
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value)}
-                  className="px-4 py-2 border border-pink-200 rounded-xl focus:border-pink-400 focus:outline-none focus:ring-2 focus:ring-pink-200 transition-all"
+                  className="px-4 py-3 border border-pink-200 rounded-xl focus:border-pink-400 focus:outline-none focus:ring-2 focus:ring-pink-200 transition-all bg-white"
                 >
                   <option value="popular">Mais Popular</option>
                   <option value="rating">Melhor Avaliado</option>
@@ -200,6 +138,9 @@ export default function ExplorePage() {
             <p className="text-gray-600">
               Mostrando <span className="font-bold text-gray-900">{filteredBooks.length}</span>{" "}
               {filteredBooks.length === 1 ? "resultado" : "resultados"}
+              {selectedGenre !== "Todos" && (
+                <span className="text-pink-600 font-medium"> em {selectedGenre}</span>
+              )}
             </p>
           </div>
 
@@ -210,12 +151,18 @@ export default function ExplorePage() {
             ))}
           </div>
 
-          {/* Load More */}
-          <div className="mt-12 text-center">
-            <button className="px-8 py-3 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-full font-bold hover:shadow-lg transition-all duration-300">
-              Carregar Mais
-            </button>
-          </div>
+          {/* Empty State */}
+          {filteredBooks.length === 0 && (
+            <div className="text-center py-12">
+              <p className="text-gray-500 text-lg">Nenhum livro encontrado nesta categoria.</p>
+              <button
+                onClick={() => setSelectedGenre("Todos")}
+                className="mt-4 px-6 py-2 bg-pink-500 text-white rounded-full hover:bg-pink-600 transition-all"
+              >
+                Ver Todos os Livros
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
