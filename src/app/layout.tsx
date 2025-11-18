@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "NovelBR - Leia Romances Online",
+  title: "Bom Romance - Leitura na Web",
   description: "Plataforma brasileira de leitura online de romances. Milhares de histórias de romance, drama e fantasia.",
 };
 
