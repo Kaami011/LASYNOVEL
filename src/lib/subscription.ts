@@ -41,7 +41,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     duration: 365,
     savings: 'Economize 27%',
     stripeProductId: 'prod_TQ52IR5rTLr29e',
-    stripePriceId: 'price_1STEsv1OX1wPZ0uVB79Q3UPr',
+    stripePriceId: 'price_1SUr5n1OX1wPZ0uVIzpiiRJN',
   },
 ];
 
